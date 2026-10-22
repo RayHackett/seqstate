@@ -148,6 +148,7 @@ class SequencePathCollection(Sequence[Path]):
                     for record in gb_io.iter(decompressed):
                         if record.accession:
                             # NOTE we want only the primary accession number!
+                            # TODO this is a bit dirty. probably should work this way
                             record.accession = record.accession.split()[0]
                             yield record
                             n += 1
@@ -163,6 +164,7 @@ class SequencePathCollection(Sequence[Path]):
                         )
                     ):
                         yield gb_io.Record(
+                            # TODO same as above this is a bit dirty!
                             accession=seq.name.split()[0],  # get primary
                             sequence=seq.alphabet.decode(seq.sequence).encode("ascii"),
                             length=len(seq),
@@ -180,6 +182,7 @@ class SequencePathCollection(Sequence[Path]):
                         )
                     ):
                         yield gb_io.Record(
+                            # TODO same as above. dirty seq name handling
                             accession=seq.name.split()[0],  # get primary
                             sequence=seq.textize().sequence.lower().encode("ascii"),
                             molecule_type="protein",
