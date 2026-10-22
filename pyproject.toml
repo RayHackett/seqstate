@@ -32,7 +32,7 @@ classifiers = [
 [project.optional-dependencies]
 compress = [
     "isal",
-    "zstandard>=0.23; python_version < '3.14'"
+    "backports.zstd; python_version < '3.14'"
 ]
 
 [project.urls]

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import sys
 import urllib.request
 from collections.abc import Callable
 from contextlib import ExitStack
@@ -16,15 +17,14 @@ except ImportError:
     import gzip
 
 # compression lib was added to the standard library with python 3.14...
-try:
-    from compression import zstd  # ty:ignore[unresolved-import]
-except ImportError as err:
-    zstd = err  # ty:ignore[invalid-assignment]
-# prior to python 3.14, using as optional dependency https://pypi.org/project/zstandard/
-try:
-    import zstandard  # ty:ignore[unresolved-import]
-except ImportError as err:
-    zstandard = err  # ty:ignore[invalid-assignment]
+if sys.version_info >= (3, 14):
+    from compression import zstd
+else:
+    # backports to previous python versions https://github.com/Rogdham/backports.zstd
+    try:
+        from backports import zstd  # ty:ignore[unresolved-import]
+    except ImportError as err:
+        zstd = err  # ty:ignore[invalid-assignment]
 
 import pyhmmer
 import rich.progress
@@ -223,7 +223,7 @@ class HMMCollection(Iterable[pyhmmer.plan7.HMM]):
 
         tmp = output.with_name(output.name + ".tmp")
         with ExitStack() as ctx:
-            if not isinstance(zstd, ImportError):
+            if sys.version_info >= (3, 14) or not isinstance(zstd, ImportError):
                 dst = ctx.enter_context(
                     zstd.open(
                         tmp,
@@ -231,17 +231,8 @@ class HMMCollection(Iterable[pyhmmer.plan7.HMM]):
                         options={zstd.CompressionParameter.compression_level: 20},
                     )
                 )
-                print("jupiii")
-            elif not isinstance(zstandard, ImportError):
-                dst = ctx.enter_context(
-                    zstandard.open(
-                        tmp, mode="wb", cctx=zstandard.ZstdCompressor(level=20)
-                    )
-                )
             else:
-                raise ImportError(
-                    "Either 'zstandard' or 'compression' library required!"
-                )
+                raise ImportError("Either 'backports.zstd' or python 3.14 required!")
 
             n = 0
             try:
