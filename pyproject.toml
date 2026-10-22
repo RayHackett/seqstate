@@ -19,7 +19,7 @@ authors = [
 maintainers = [
   {name = "Raymund Hackett", email = "r.e.hackett@uni-konstanz.de"}
 ]
-description = "Handle genomic seqeunces, call genes, annotate with HMMs using states!"
+description = "Handle genomic seqeunces, call genes, annotate with HMMs and build genome databases!"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICEN[CS]E.*"]
@@ -32,7 +32,7 @@ classifiers = [
 [project.optional-dependencies]
 compress = [
     "isal",
-    "compression"
+    "zstandard>=0.23; python_version < '3.14'"
 ]
 
 [project.urls]

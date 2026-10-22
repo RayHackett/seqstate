@@ -27,6 +27,7 @@ starting...
 - Fix the preprocessing cli to handle various hmm sources via keyword better
 - Link protein type with handling from peptides.py
 - write tests for HMMCollection class
+- Test speed maybe with lz4 compression of hmms. nominally, decompression rate should be better
 
 ## Features for Gecco
 

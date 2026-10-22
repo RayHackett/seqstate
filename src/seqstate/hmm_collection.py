@@ -15,11 +15,12 @@ try:
 except ImportError:
     import gzip
 
+# compression lib was added to the standard library with python 3.14...
 try:
     from compression import zstd  # ty:ignore[unresolved-import]
 except ImportError as err:
     zstd = err  # ty:ignore[invalid-assignment]
-
+# prior to python 3.14, using as optional dependency https://pypi.org/project/zstandard/
 try:
     import zstandard  # ty:ignore[unresolved-import]
 except ImportError as err:
