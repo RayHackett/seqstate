@@ -742,11 +742,11 @@ class GeneCollection(Iterable[Gene]):
         gene_df = polars.from_dict(
             data=tbl_data,
             schema_overrides={
-                "sequence_id": polars.Utf8,
+                "sequence_id": polars.Categorical("sequence_id"),
                 "protein_id": polars.Utf8,
                 "start": polars.UInt32,
                 "end": polars.UInt32,
-                "strand": polars.Utf8,
+                "strand": polars.Enum(["+", "-"]),
             },
         ).sort(by=["sequence_id", "start", "end"])
         return GeneTable(gene_df.lazy())
@@ -818,13 +818,13 @@ class AnnotatedGeneCollection(Sequence[Gene]):
                 tbl_data["score"].append(domain.score)
 
         schema = {
-            "sequence_id": polars.Utf8,
+            "sequence_id": polars.Categorical("sequence_id"),
             "protein_id": polars.Utf8,
             "start": polars.UInt32,
             "end": polars.UInt32,
-            "strand": polars.Utf8,
-            "domain": polars.Utf8,
-            "hmm": polars.Utf8,
+            "strand": polars.Enum(["+", "-"]),
+            "domain": polars.Categorical("domain"),
+            "hmm": polars.Categorical("hmm"),
             "i_evalue": polars.Float64,
             "pvalue": polars.Float64,
             "domain_start": polars.UInt32,
@@ -857,13 +857,13 @@ class AnnotatedGeneCollection(Sequence[Gene]):
                 tbl_data["domain_end"].append(domain.end)
 
         schema = {
-            "sequence_id": polars.Utf8,
+            "sequence_id": polars.Categorical("sequence_id"),
             "protein_id": polars.Utf8,
             "start": polars.UInt32,
             "end": polars.UInt32,
-            "strand": polars.Utf8,
-            "domain": polars.Utf8,
-            "hmm": polars.Utf8,
+            "strand": polars.Enum(["+", "-"]),
+            "domain": polars.Categorical("domain"),
+            "hmm": polars.Categorical("hmm"),
             "i_evalue": polars.Float64,
             "pvalue": polars.Float64,
             "domain_start": polars.UInt32,
@@ -885,11 +885,11 @@ class GeneTable:
 
     schema = polars.Schema(
         {
-            "sequence_id": polars.Utf8,
+            "sequence_id": polars.Categorical("sequence_id"),
             "protein_id": polars.Utf8,
             "start": polars.UInt32,
             "end": polars.UInt32,
-            "strand": polars.Utf8,
+            "strand": polars.Enum(["+", "-"]),
         }
     )
 
@@ -947,18 +947,13 @@ class GeneTable:
 
     def label(self, labels: polars.LazyFrame, label_name: str) -> LabeledGeneTable:
 
-        if labels.collect_schema()[label_name] == polars.Boolean:
-            mapping = "1:1"
-        else:
-            mapping = "1:m"
-
         return LabeledGeneTable(
             table=(
                 self.table.join(
                     other=labels,
                     on="protein_id",
                     how="left",
-                    validate=mapping,
+                    validate="1:m",
                 ).filter(polars.col(label_name).is_not_null())
             ),
             label_column=label_name,
@@ -970,12 +965,12 @@ class LabeledGeneTable:
 
     schema = polars.Schema(
         {
-            "sequence_id": polars.Utf8,
+            "sequence_id": polars.Categorical("sequence_id"),
             "protein_id": polars.Utf8,
             "start": polars.UInt32,
             "end": polars.UInt32,
-            "strand": polars.Utf8,
-            "label": polars.String,
+            "strand": polars.Enum(["+", "-"]),
+            "label": polars.Categorical("label"),
         }
     )
 
@@ -1000,10 +995,10 @@ class LabeledGeneTable:
                     label_column,
                 ]
             )
+            # Cast inner to a string!
             .with_columns(
-                polars.col(label_column).cast(polars.String)  # Cast inner to a string!
-            )
-            .rename({label_column: "label"})
+                polars.col(label_column).cast(polars.Categorical("label"))
+            ).rename({label_column: "label"})
         )
         self._validate()
 
@@ -1049,6 +1044,8 @@ class LabeledGeneTable:
         else:
             genes = polars.scan_csv(file, separator="\t")
 
+        genes = genes.cast({label_column: polars.Categorical("label")})
+
         return LabeledGeneTable(genes, label_column)
 
     def dump(
@@ -1075,13 +1072,13 @@ class FeatureTable:
 
     schema = polars.Schema(
         {
-            "sequence_id": polars.Utf8,
+            "sequence_id": polars.Categorical("sequence_id"),
             "protein_id": polars.Utf8,
             "start": polars.UInt32,
             "end": polars.UInt32,
-            "strand": polars.Utf8,
-            "domain": polars.Utf8,
-            "hmm": polars.Utf8,
+            "strand": polars.Enum(["+", "-"]),
+            "domain": polars.Categorical("domain"),
+            "hmm": polars.Categorical("hmm"),
             "i_evalue": polars.Float64,
             "pvalue": polars.Float64,
             "domain_start": polars.UInt32,

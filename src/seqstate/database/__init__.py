@@ -24,7 +24,11 @@ STRANDS = polars.DataFrame(
     [
         {"strand": "+", "strand_int": 1},
         {"strand": "-", "strand_int": -1},
-    ]
+    ],
+    schema={
+        "strand": polars.Enum(["+", "-"]),
+        "strand_int": polars.Int8,
+    },
 )
 
 
@@ -258,7 +262,11 @@ class GenomeDatabase:
             {
                 "domain": vocab.classes_,
                 "vocab_id": vocab.lookup_indices(vocab.classes_),
-            }
+            },
+            schema={
+                "domain": polars.Categorical("domain"),
+                "vocab_id": polars.UInt16,
+            },
         )
         features_df = (
             features_df.join(
@@ -632,7 +640,11 @@ class LabeledGenomeDatabase(GenomeDatabase):
             {
                 "label": label_vocab.classes_,
                 "label_vocab_id": label_vocab.lookup_indices(label_vocab.classes_),
-            }
+            },
+            schema={
+                "label": polars.Categorical("label"),
+                "label_vocab_id": polars.UInt16,
+            },
         )
 
         # sort genes and compute absolute index

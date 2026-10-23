@@ -30,7 +30,7 @@ starting...
 - Link protein type with handling from peptides.py
 - write tests for HMMCollection class
 - Test speed maybe with lz4 compression of hmms. nominally, decompression rate should be better
-- can we save space in genetable and feature table by encoding sequence_id better?
+- can we save space in genetable and feature table by encoding protein_id better?
 
 ## Features for Gecco
 
