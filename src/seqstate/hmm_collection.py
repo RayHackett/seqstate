@@ -25,6 +25,10 @@ else:
         from backports import zstd  # ty:ignore[unresolved-import]
     except ImportError as err:
         zstd = err  # ty:ignore[invalid-assignment]
+        try:
+            import zstandard  # ty:ignore[unresolved-import]
+        except ImportError as err:
+            zstandard = err  # ty:ignore[invalid-assignment]
 
 import pyhmmer
 import rich.progress
@@ -231,8 +235,16 @@ class HMMCollection(Iterable[pyhmmer.plan7.HMM]):
                         options={zstd.CompressionParameter.compression_level: 20},
                     )
                 )
+            elif not isinstance(zstandard, ImportError):
+                dst = ctx.enter_context(
+                    zstandard.open(
+                        tmp, mode="wb", cctx=zstandard.ZstdCompressor(level=20)
+                    )
+                )
             else:
-                raise ImportError("Either 'backports.zstd' or python 3.14 required!")
+                raise ImportError(
+                    "Either 'backports.zstd' or 'zstandard' or python 3.14 required!"
+                )
 
             n = 0
             try:
