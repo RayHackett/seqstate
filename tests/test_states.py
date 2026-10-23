@@ -70,7 +70,7 @@ class test_Protein(unittest.TestCase):
             alphabet
         )
 
-    def make_domain(self, start, end, pvalue):
+    def make_domain(self, start, end, pvalue) -> Domain:
         return Domain(
             name="D",
             start=start,
@@ -83,14 +83,14 @@ class test_Protein(unittest.TestCase):
 
     def test_disentangle_no_domains(self):
         d1 = self.make_domain(0, 20, 0.05)
-        p = Protein("p1", self.seq, 11, [d1])
+        p = Protein("p1", self.seq, 11, (d1,))
         self.assertIs(p.disentangle(), p)
 
     def test_disentangle_overlapping(self):
         d1 = self.make_domain(0, 20, 0.05)
         d2 = self.make_domain(10, 30, 0.01)
 
-        p = Protein("p1", self.seq, 11, [d1, d2])
+        p = Protein("p1", self.seq, 11, (d1, d2))
         disentangled = p.disentangle()
 
         self.assertEqual(len(disentangled.domains), 1)
@@ -100,7 +100,7 @@ class test_Protein(unittest.TestCase):
         d1 = self.make_domain(0, 10, 0.05)
         d2 = self.make_domain(20, 30, 0.01)
 
-        p = Protein("p1", self.seq, 11, [d1, d2])
+        p = Protein("p1", self.seq, 11, (d1, d2))
         self.assertEqual(p.disentangle(), p)
 
     def test_to_faa_wrapping(self):
@@ -123,7 +123,7 @@ class test_Gene(unittest.TestCase):
 
         cls.record = gb_io.Record(accession="ACC123", sequence=b"ATG" * 10)
 
-        cls.protein = Protein(id="p1", seq=cls.seq, tt=11, domains=[])
+        cls.protein = Protein(id="p1", seq=cls.seq, tt=11)
 
     def test_init(self):
         gene = Gene(
@@ -143,7 +143,7 @@ class test_Gene(unittest.TestCase):
         d1 = Domain("D", 0, 20, "Pfam", 1e-5, 0.05, None)
         d2 = Domain("D", 10, 30, "Pfam", 1e-5, 0.01, None)
 
-        protein = Protein("p1", self.seq, 11, [d1, d2])
+        protein = Protein("p1", self.seq, 11, (d1, d2))
         gene = Gene(self.record, 0, 100, Strand.Coding, protein)
 
         new_gene = gene.disentangle()
@@ -232,6 +232,14 @@ class test_SequencePathCollection(unittest.TestCase):
                 "preprocessing", "GCF_036527415.1.contigs1+2.fna"
             ),
         ]
+        cls.paths4 = [
+            resource_files(test_data).joinpath(
+                "preprocessing", "GCF_000013265.1_part.faa"
+            ),
+            resource_files(test_data).joinpath(
+                "preprocessing", "GCF_000013265.1_part.gff"
+            ),
+        ]
         cls.console = Console(file=io.StringIO())  # silent console
 
     def test_format_guessing(self):
@@ -257,22 +265,33 @@ class test_SequencePathCollection(unittest.TestCase):
         self.assertEqual(col1[0], paths[0])
         self.assertEqual(len(col1), 2)
 
-    def test_loading(self):
-        col1 = SequencePathCollection(
+    def test_fna(self):
+        col = SequencePathCollection(
             paths=self.paths1, console=self.console  # ty:ignore[invalid-argument-type]
         ).load_files()
-        self.assertEqual(len(list(col1)), 2)
+        self.assertEqual(len(list(col)), 2)
 
-        col2 = SequencePathCollection(
+    def test_fna_with_genbank(self):
+        col = SequencePathCollection(
             paths=self.paths2, console=self.console  # ty:ignore[invalid-argument-type]
         ).load_files()
-        self.assertEqual(len(list(col2)), 3)
+        self.assertEqual(len(list(col)), 3)
 
+    def test_gff(self):
+        col = SequencePathCollection(
+            format="faa+gff",
+            paths=self.paths4,  # ty:ignore[invalid-argument-type]
+            console=self.console,
+        ).load_files()
+        self.assertEqual(len(list(col)), 1)
+
+    def test_errors(self):
         with self.assertRaises(ValueError):
             SequencePathCollection(
                 paths=self.paths3,  # ty:ignore[invalid-argument-type]
                 console=self.console,
             ).load_files()
+
         with self.assertRaises(FileNotFoundError):
             paths = [Path("path1"), Path("path2")]
             SequencePathCollection(paths=paths, console=self.console).load_files()

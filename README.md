@@ -11,7 +11,9 @@ starting...
 
 # Feature implementaton TODOs
 - Handle the sequence accession names better
-- Decide which other information to optionally get from a genbank.
+- Fromat parsing for faa vs fna
+- embl and ncbi input
+- Decide which other information to optionally get from a genbank or even gff.
 - CDS finder
     - non translated cds genes?
     - other RNA genes
@@ -28,6 +30,7 @@ starting...
 - Link protein type with handling from peptides.py
 - write tests for HMMCollection class
 - Test speed maybe with lz4 compression of hmms. nominally, decompression rate should be better
+- can we save space in genetable and feature table by encoding sequence_id better?
 
 ## Features for Gecco
 

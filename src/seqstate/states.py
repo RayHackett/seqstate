@@ -147,8 +147,9 @@ class SequencePathCollection(Sequence[Path]):
                 if format == "genbank":
                     for record in gb_io.iter(decompressed):
                         if record.accession:
-                            # NOTE we want only the primary accession number!
-                            # TODO this is a bit dirty. probably should work this way
+                            # genbanks for WGS contis often have:
+                            # <accession space master record accesion>
+                            # version often maybe better??
                             record.accession = record.accession.split()[0]
                             yield record
                             n += 1
@@ -164,14 +165,14 @@ class SequencePathCollection(Sequence[Path]):
                         )
                     ):
                         yield gb_io.Record(
-                            # TODO same as above this is a bit dirty!
-                            accession=seq.name.split()[0],  # get primary
+                            accession=seq.name.split()[0],
                             sequence=seq.alphabet.decode(seq.sequence).encode("ascii"),
                             length=len(seq),
                             molecule_type="dna",
                         )
                         n += 1
                 elif format == "faa+gff":
+                    # This means the faa file!
                     alphabet = pyhmmer.easel.Alphabet.amino()
                     for seq in ctx.enter_context(
                         pyhmmer.easel.SequenceFile(
@@ -182,11 +183,12 @@ class SequencePathCollection(Sequence[Path]):
                         )
                     ):
                         yield gb_io.Record(
-                            # TODO same as above. dirty seq name handling
-                            accession=seq.name.split()[0],  # get primary
+                            accession=seq.name.split()[0],
                             sequence=seq.textize().sequence.lower().encode("ascii"),
                             molecule_type="protein",
+                            length=len(seq),
                         )
+                        n += 1
                 else:
                     raise NotImplementedError(f"Unknown format {format}")
 
@@ -200,14 +202,18 @@ class SequencePathCollection(Sequence[Path]):
         paths: list[Path],
         streaming: bool,
         min_record_length: int = 0,
+        format: str | None = None,
     ) -> Iterable[gb_io.Record]:
         unique_contigs: set[str] = set()
+
+        if format is None:
+            format = self.format
 
         discarded_seqs = 0
         for p in paths:
             for record in self._load_records(
                 path=p,
-                format=self.format,
+                format=format,
                 console=self.console,
                 streaming=streaming,
             ):
@@ -253,18 +259,33 @@ class SequencePathCollection(Sequence[Path]):
             for path in self.paths:
                 guess = self.guess_sequences_format(path)
                 if path.suffix == ".faa" or guess == "fasta":
-                    prot_records = list(
-                        self._load_records(
-                            format="faa+gff",
-                            path=path,
-                            streaming=False,
-                            console=self.console,
-                        )
+                    prot_records = self._iter_sequences(
+                        paths=[path],
+                        streaming=False,
+                        format="faa+gff",  # TODO change to faa
                     )
+
+                    # NOTE:
+                    # i materialize the prot_records here. this is expensive
+                    # but i do it in case gff and faa file are not ordered the same
+                    # if they are ordered, we could just always take the next protein
+
+                    # _iter_sequences guarantees unique accessions
                     prot_dict = {prot.accession: prot.sequence for prot in prot_records}
                 elif path.suffix == ".gff" or guess == "gff":
-                    # parse a tab delinated gff file with polars!.
-                    annotations = (
+                    # NOTE
+                    # this will fails for gff3 with a ##FASTA section.
+                    # to really properly handle that, i should probably move to gffbase
+                    # https://pypi.org/project/gffbase/
+
+                    # For now; parse a tab delinated gff file with polars!.
+
+                    def _attr(tag: str) -> polars.Expr:
+                        return polars.col("attributes").str.extract(
+                            rf"(?:^|;){tag}=([^;]+)", 1
+                        )
+
+                    gff_df = (
                         polars.read_csv(
                             path,
                             has_header=False,
@@ -276,51 +297,75 @@ class SequencePathCollection(Sequence[Path]):
                                 "source": polars.String,
                                 "type": polars.String,
                                 "start": polars.UInt32,  # 1-based
-                                "end": polars.UInt32,  # 1-based
+                                "end": polars.UInt32,  # inclusive
                                 "score": polars.Float32,
                                 "strand": polars.String,
-                                "phase": polars.String,
+                                "phase": polars.String,  # should be 0 for CDS
                                 "attributes": polars.String,
                             },
                         )
-                        # NOTE we will correct for start and end
-                        # at the extract Genes step
-                        .filter(polars.col("type") == "CDS")
+                        # NOTE we will correct for start and end in the record
+                        .filter(polars.col("type").is_in(["CDS", "SO:0000316"]))
                         .with_columns(
-                            first=polars.col("attributes").str.split(";").list.first()
-                        )
-                        .filter(polars.col("first").str.starts_with("ID="))
-                        .with_columns(
-                            protein_id=polars.col("first").str.strip_prefix("ID=")
+                            protein_id=polars.coalesce(
+                                _attr("protein_id"), _attr("ID")
+                            ),
                         )
                         .select(["seqid", "start", "end", "strand", "protein_id"])
                     )
-                    # take only those of type CDS and which have an ID tag
-                    # ID tag is the protein accession
+
+                    if gff_df.is_empty():
+                        raise ValueError(
+                            "Could not parse .gff file. "
+                            "Likely there were no records of type 'CDS' or 'Protein'"
+                        )
+
+                    missing = gff_df.filter(polars.col("protein_id").is_null())
+                    if not missing.is_empty():
+                        raise ValueError(
+                            f"{missing.height} CDS rows protein_id= or ID=, "
+                            f"e.g. {missing['attributes'].head(3).to_list()}"
+                        )
+
+                    if gff_df["seqid", "protein_id"].n_unique() != gff_df.height:
+                        # most faa files dont include the genome accession
+                        raise ValueError(
+                            "Sequence id and protein_id in the gff file are not unique!"
+                        )
                 else:
                     raise ValueError(f"Expecting a fasta or gff file from {str(path)}.")
 
             # we return a sequence collection which can be "called" by the CDS finder.
             # it has feature kind: CDS with qualifiers id and translation
             seqs: dict[str, gb_io.Record] = {}  # dict of seq accession gb_io.Record
-            for row in annotations.iter_rows():
+            for row in gff_df.iter_rows():
                 if row[0] not in seqs:
                     seqs[row[0]] = gb_io.Record(sequence=b"", accession=row[0])
+
+                prot_seq = prot_dict.pop(row[4], None)
+                if prot_seq is None:
+                    raise ValueError(f"protein_id {row[4]} not found in the faa file!")
 
                 # start -1 to make it 0-based, end exclusive
                 location = gb_io.Between(start=row[1] - 1, end=row[2])
                 if Strand.from_sign(row[3]) == Strand.Reverse:
                     location = gb_io.Complement(location)
+
+                # NOTE
+                # to safely map seqid, protein_id to the accessions in the faa file,
+                # the gff protein_id AND the faa accession must be identical
+                # If there are multiple genomes, the identifers must include the seqid
                 seqs[row[0]].features.append(
                     gb_io.Feature(
                         kind="CDS",
                         location=location,
                         qualifiers=[
+                            # column 4 is protein_id column!
                             # instead I could let CDSFinder assign new names?
                             gb_io.Qualifier(key="locus_tag", value=row[4]),
                             gb_io.Qualifier(
                                 key="translation",
-                                value=prot_dict.pop(row[4]).decode("ascii"),
+                                value=prot_seq.decode("ascii"),
                             ),
                             # gb_io.Qualifier(
                             #     key="transl_table",
@@ -334,6 +379,7 @@ class SequencePathCollection(Sequence[Path]):
                 raise ValueError(
                     f"There remain {len(prot_dict)} protein sequences",
                     "not mapped to any contig in the GFF file!",
+                    f"{list(prot_dict.keys())[:max(len(prot_dict), 3)]}...",
                 )
             return SequenceCollection(
                 sequences=list(seqs.values()),

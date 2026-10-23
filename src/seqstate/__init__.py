@@ -80,8 +80,8 @@ class Domain:
         assert self.i_evalue > 0
         assert isinstance(self.pvalue, float)
         assert self.pvalue > 0
-        assert isinstance(self.score, float)
         if self.score is not None:
+            assert isinstance(self.score, float)
             self.score > 0
 
 
@@ -100,13 +100,15 @@ class Protein:
     id: str  # i could rely on id of digital sequence but its better to keep it seperate
     seq: pyhmmer.easel.DigitalSequence[pyhmmer.easel.AA]
     tt: int
-    domains: list[Domain] = field(default_factory=tuple)
+    domains: tuple[Domain, ...] = field(default_factory=tuple)
 
     def __post_init__(self):
         assert isinstance(self.id, str)
-        assert isinstance(self.seq, pyhmmer.easel.DigitalSequence[pyhmmer.easel.AA])
+        assert isinstance(self.seq, pyhmmer.easel.DigitalSequence)
+        assert self.seq.alphabet == pyhmmer.easel.Alphabet.amino()
         assert isinstance(self.tt, int)
-        assert isinstance(self.domains, list[Domain])
+        assert isinstance(self.domains, tuple)
+        assert all(isinstance(domain, Domain) for domain in self.domains)
 
     def __eq__(self, other):
         if not isinstance(other, Protein):
@@ -129,7 +131,7 @@ class Protein:
             )
         )
 
-    def with_domains(self, domains: list[Domain]) -> Protein:
+    def with_domains(self, domains: tuple[Domain]) -> Protein:
         """Return a copy of the protein with the domains replaced"""
         if self.domains:
             raise ValueError(
@@ -139,7 +141,7 @@ class Protein:
             id=self.id,
             seq=self.seq,
             tt=self.tt,
-            domains=domains,
+            domains=tuple(domains),
         )
 
     def disentangle(self) -> Protein:
@@ -171,7 +173,7 @@ class Protein:
             id=self.id,
             seq=self.seq,
             tt=self.tt,
-            domains=kept,
+            domains=tuple(kept),
         )
 
     def to_faa(self) -> str:
