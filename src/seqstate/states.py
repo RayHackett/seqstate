@@ -1308,8 +1308,8 @@ class PyHMMER:
         # )
 
         profiles = self.hmm.to_HMMCollection().filter_accessions(
-            self.whitelist
-        )  # ty:ignore[invalid-argument-type]
+            self.whitelist  # ty:ignore[invalid-argument-type]
+        )
         # Run search pipeline using the filtered HMMs
         cpus = 0 if self.cpus is None else self.cpus
         hmms_hits = hmmsearch(

@@ -131,7 +131,7 @@ class Protein:
             )
         )
 
-    def with_domains(self, domains: tuple[Domain]) -> Protein:
+    def with_domains(self, domains: tuple[Domain, ...]) -> Protein:
         """Return a copy of the protein with the domains replaced"""
         if self.domains:
             raise ValueError(
@@ -273,7 +273,7 @@ class Gene:
         memo[id(self)] = new
         return new
 
-    def with_protein_domains(self, domains: list[Domain]) -> Gene:
+    def with_protein_domains(self, domains: tuple[Domain, ...]) -> Gene:
         """Return a copy of the gene with the protein domains replaced"""
         return Gene(
             start=self.start,
