@@ -172,7 +172,7 @@ class Featureizer(Generic[T]):
                 self.features,
                 how="inner",
                 # on=["sequence_id", "protein_id", "start", "end", "strand"],
-                on="protein_id",  # this is a bit unsafer and allows changes in start/end
+                on=["sequence_id", "protein_id"],  # less safe; changes in start/end
             )
         elif isinstance(genes, polars.LazyFrame) and isinstance(
             self.features, polars.LazyFrame
@@ -181,7 +181,7 @@ class Featureizer(Generic[T]):
                 self.features,
                 how="inner",
                 # on=["sequence_id", "protein_id", "start", "end", "strand"],
-                on="protein_id",  # this is a bit unsafer and allows changes in start/end
+                on=["sequence_id", "protein_id"],  # less safe; changes in start/end
             )
         else:
             raise TypeError(

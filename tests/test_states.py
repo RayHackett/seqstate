@@ -718,11 +718,15 @@ class test_AnnotatedGeneCollection(unittest.TestCase):
                 "protein_id": polars.Utf8,
                 "test_label": polars.Categorical("label"),
             },
+        ).with_columns(
+            sequence_id=polars.lit("NZ_JAQOLM010000012.1").cast(
+                polars.Categorical("sequence_id")
+            )
         )
 
-        # with self.assertRaises(polars.exceptions.ComputeError):
-        #     lbl_tbl = genes.label(label_df, label_name="test_label")
-        #     labels = lbl_tbl.build_label_vocab()
+        with self.assertRaises(polars.exceptions.ComputeError):
+            lbl_tbl = genes.label(label_df, label_name="test_label")
+            labels = lbl_tbl.build_label_vocab()
 
         # classic string multilabel case
         label_df = polars.LazyFrame(
@@ -740,6 +744,10 @@ class test_AnnotatedGeneCollection(unittest.TestCase):
                 "protein_id": polars.Utf8,
                 "test_label": polars.Categorical("label"),
             },
+        ).with_columns(
+            sequence_id=polars.lit("NZ_JAQOLM010000012.1").cast(
+                polars.Categorical("sequence_id")
+            )
         )
         lbl_tbl = genes.label(label_df, label_name="test_label")
         labels = lbl_tbl.build_label_vocab()

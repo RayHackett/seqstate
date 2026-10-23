@@ -947,13 +947,18 @@ class GeneTable:
 
     def label(self, labels: polars.LazyFrame, label_name: str) -> LabeledGeneTable:
 
+        if len(labels.unique(label_name).collect()) == 2:
+            mapping = "1:1"
+        else:
+            mapping = "1:m"
+
         return LabeledGeneTable(
             table=(
                 self.table.join(
                     other=labels,
-                    on="protein_id",
+                    on=["sequence_id", "protein_id"],
                     how="left",
-                    validate="1:m",
+                    validate=mapping,
                 ).filter(polars.col(label_name).is_not_null())
             ),
             label_column=label_name,
