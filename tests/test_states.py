@@ -247,13 +247,25 @@ class test_SequencePathCollection(unittest.TestCase):
             SequencePathCollection.guess_sequences_format(
                 self.paths2[0]  # ty:ignore[invalid-argument-type]
             ),
-            "fasta",
+            "fna",
         )
         self.assertEqual(
             SequencePathCollection.guess_sequences_format(
                 self.paths2[1]  # ty:ignore[invalid-argument-type]
             ),
             "genbank",
+        )
+        self.assertEqual(
+            SequencePathCollection.guess_sequences_format(
+                self.paths4[0]  # ty:ignore[invalid-argument-type]
+            ),
+            "faa",
+        )
+        self.assertEqual(
+            SequencePathCollection.guess_sequences_format(
+                self.paths4[1]  # ty:ignore[invalid-argument-type]
+            ),
+            "gff",
         )
 
     def test_init(self):
@@ -284,6 +296,23 @@ class test_SequencePathCollection(unittest.TestCase):
             console=self.console,
         ).load_files()
         self.assertEqual(len(list(col)), 1)
+
+        col2 = SequencePathCollection(
+            paths=self.paths4,  # ty:ignore[invalid-argument-type]
+            console=self.console,
+        ).load_files()
+        self.assertEqual(len(list(col2)), 1)
+
+    # def test_only_faa(self):
+    #     col = SequencePathCollection(
+    #         paths=[self.paths4[0]],  # ty:ignore[invalid-argument-type]
+    #         console=self.console,
+    #     ).load_files()
+
+    #     col.split_and_dump(Path("/home/ray/Documents/seqstate/file.faa"), compressed=False)
+
+    #     x = col.extract_genes()
+    #     print(x)
 
     def test_errors(self):
         with self.assertRaises(ValueError):

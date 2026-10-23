@@ -79,22 +79,29 @@ class SequencePathCollection(Sequence[Path]):
 
     @staticmethod
     def guess_sequences_format(path: Union[str, Path]) -> str | None:
-        with zopen(path, mode="rb") as fh:
-            for head in iter(lambda: fh.read(256), b""):
-                head = head.strip()
-                if head:
-                    break
-            else:
-                return None
 
-        if head.startswith(b">"):
-            return "fasta"
-        if head.startswith(b"LOCUS"):
-            return "genbank"
-        if head.startswith(b"ID "):
-            return "embl"
-        if head.startswith(b"##gff-version 3"):
-            return "gff"
+        def _fasta_kind(sequence: bytes) -> str:
+            non_nt = len(sequence.translate(None, delete=b"ACGTUNacgtun"))
+            # no dna seq should have more than 10% ATCGUN
+            return "fna" if non_nt * 10 <= len(sequence) else "faa"
+
+        with zopen(path, mode="rb") as fh:
+            for line in fh:
+                line = line.strip()
+                if line:
+                    break
+                else:
+                    return None
+
+            if line.startswith(b">"):
+                return _fasta_kind((next(fh, b"").strip()))
+            elif line.startswith(b"LOCUS"):
+                return "genbank"
+            elif line.startswith(b"ID "):
+                return "embl"
+            elif line.startswith(b"##gff-version 3"):
+                return "gff"
+
         return None
 
     @classmethod
@@ -157,7 +164,7 @@ class SequencePathCollection(Sequence[Path]):
                             raise ValueError(
                                 f"Encountered a record without valid accession in {str(path)}"
                             )
-                elif format in ["fasta", "embl", "ncbi"]:
+                elif format in ["fna", "embl", "ncbi"]:
                     alphabet = pyhmmer.easel.Alphabet.dna()
                     for seq in ctx.enter_context(
                         pyhmmer.easel.SequenceFile(
@@ -171,8 +178,7 @@ class SequencePathCollection(Sequence[Path]):
                             molecule_type="dna",
                         )
                         n += 1
-                elif format == "faa+gff":
-                    # This means the faa file!
+                elif format == "faa":
                     alphabet = pyhmmer.easel.Alphabet.amino()
                     for seq in ctx.enter_context(
                         pyhmmer.easel.SequenceFile(
@@ -194,8 +200,8 @@ class SequencePathCollection(Sequence[Path]):
 
         except ValueError as err:
             raise RuntimeError(f"Failed to load sequences: {err}") from err
-        else:
-            console.print(f"Loaded {n} sequences from {str(path)!r}")
+
+        console.print(f"Loaded {n} sequences from {str(path)!r}")
 
     def _iter_sequences(
         self,
@@ -233,6 +239,68 @@ class SequencePathCollection(Sequence[Path]):
                 f"Discarded {discarded_seqs} sequences below {min_record_length} bps"
             )
 
+    @staticmethod
+    def _parse_gff(path) -> polars.DataFrame:
+        """
+        my attempt at parsing gff3 files using polars.
+
+        Note:
+            this will fails for gff3 with a ##FASTA section.
+            to really properly handle that, i should probably move to gffbase
+            https://pypi.org/project/gffbase/
+        """
+
+        def _attr(tag: str) -> polars.Expr:
+            return polars.col("attributes").str.extract(rf"(?:^|;){tag}=([^;]+)", 1)
+
+        gff_df = (
+            polars.read_csv(
+                path,
+                has_header=False,
+                separator="\t",
+                comment_prefix="#",
+                null_values=".",
+                schema={
+                    "seqid": polars.String,
+                    "source": polars.String,
+                    "type": polars.String,
+                    "start": polars.UInt32,  # 1-based
+                    "end": polars.UInt32,  # inclusive
+                    "score": polars.Float32,
+                    "strand": polars.String,
+                    "phase": polars.String,  # should be 0 for CDS
+                    "attributes": polars.String,
+                },
+            )
+            # NOTE we will correct for start and end in the record
+            .filter(polars.col("type").is_in(["CDS", "SO:0000316"]))
+            .with_columns(
+                protein_id=polars.coalesce(_attr("protein_id"), _attr("ID")),
+            )
+            .select(["seqid", "start", "end", "strand", "protein_id"])
+        )
+
+        if gff_df.is_empty():
+            raise ValueError(
+                "Could not parse .gff file. "
+                "Likely there were no records of type 'CDS' or 'Protein'"
+            )
+
+        missing = gff_df.filter(polars.col("protein_id").is_null())
+        if not missing.is_empty():
+            raise ValueError(
+                f"{missing.height} CDS rows protein_id= or ID=, "
+                f"e.g. {missing['attributes'].head(3).to_list()}"
+            )
+
+        if gff_df["seqid", "protein_id"].n_unique() != gff_df.height:
+            # most faa files dont include the genome accession
+            raise ValueError(
+                "Sequence id and protein_id in the gff file are not unique!"
+            )
+
+        return gff_df
+
     def load_files(
         self,
         min_record_length: int = 0,
@@ -244,96 +312,39 @@ class SequencePathCollection(Sequence[Path]):
                 f"Skipping sequences with fewer than {min_record_length} bases"
             )
 
-        if self.format == "faa+gff":
+        faa_path, gff_path = None, None
+        if len(self.paths) == 2 and (self.format is None or self.format == "faa+gff"):
+
+            guess1 = self.guess_sequences_format(self.paths[0])
+            guess2 = self.guess_sequences_format(self.paths[1])
+
+            if guess1 == "faa":
+                faa_path, gff_path = self.paths[0], self.paths[1]
+            elif guess2 == "faa" and guess1 == "gff":
+                faa_path, gff_path = self.paths[1], self.paths[0]
+
+        if faa_path is not None and gff_path is not None:
             if streaming:
                 raise ValueError("No streaming support with faa+gff format!")
-
-            if len(self.paths) != 2:
-                raise ValueError("Expecting one fasta faa and one gff file!")
 
             if min_record_length > 0:
                 raise ValueError(
                     "A minimum record length is not supported for faa+gff input"
                 )
 
-            for path in self.paths:
-                guess = self.guess_sequences_format(path)
-                if path.suffix == ".faa" or guess == "fasta":
-                    prot_records = self._iter_sequences(
-                        paths=[path],
-                        streaming=False,
-                        format="faa+gff",  # TODO change to faa
-                    )
+            prot_records = self._iter_sequences(
+                paths=[faa_path],
+                streaming=False,
+                format="faa",
+            )
+            # NOTE:
+            # i materialize the prot_records here. this is expensive
+            # but i do it in case gff and faa file are not ordered the same
+            # if they are ordered, we could just always take the next protein
 
-                    # NOTE:
-                    # i materialize the prot_records here. this is expensive
-                    # but i do it in case gff and faa file are not ordered the same
-                    # if they are ordered, we could just always take the next protein
-
-                    # _iter_sequences guarantees unique accessions
-                    prot_dict = {prot.accession: prot.sequence for prot in prot_records}
-                elif path.suffix == ".gff" or guess == "gff":
-                    # NOTE
-                    # this will fails for gff3 with a ##FASTA section.
-                    # to really properly handle that, i should probably move to gffbase
-                    # https://pypi.org/project/gffbase/
-
-                    # For now; parse a tab delinated gff file with polars!.
-
-                    def _attr(tag: str) -> polars.Expr:
-                        return polars.col("attributes").str.extract(
-                            rf"(?:^|;){tag}=([^;]+)", 1
-                        )
-
-                    gff_df = (
-                        polars.read_csv(
-                            path,
-                            has_header=False,
-                            separator="\t",
-                            comment_prefix="#",
-                            null_values=".",
-                            schema={
-                                "seqid": polars.String,
-                                "source": polars.String,
-                                "type": polars.String,
-                                "start": polars.UInt32,  # 1-based
-                                "end": polars.UInt32,  # inclusive
-                                "score": polars.Float32,
-                                "strand": polars.String,
-                                "phase": polars.String,  # should be 0 for CDS
-                                "attributes": polars.String,
-                            },
-                        )
-                        # NOTE we will correct for start and end in the record
-                        .filter(polars.col("type").is_in(["CDS", "SO:0000316"]))
-                        .with_columns(
-                            protein_id=polars.coalesce(
-                                _attr("protein_id"), _attr("ID")
-                            ),
-                        )
-                        .select(["seqid", "start", "end", "strand", "protein_id"])
-                    )
-
-                    if gff_df.is_empty():
-                        raise ValueError(
-                            "Could not parse .gff file. "
-                            "Likely there were no records of type 'CDS' or 'Protein'"
-                        )
-
-                    missing = gff_df.filter(polars.col("protein_id").is_null())
-                    if not missing.is_empty():
-                        raise ValueError(
-                            f"{missing.height} CDS rows protein_id= or ID=, "
-                            f"e.g. {missing['attributes'].head(3).to_list()}"
-                        )
-
-                    if gff_df["seqid", "protein_id"].n_unique() != gff_df.height:
-                        # most faa files dont include the genome accession
-                        raise ValueError(
-                            "Sequence id and protein_id in the gff file are not unique!"
-                        )
-                else:
-                    raise ValueError(f"Expecting a fasta or gff file from {str(path)}.")
+            # _iter_sequences guarantees unique accessions
+            prot_dict = {prot.accession: prot.sequence for prot in prot_records}
+            gff_df = self._parse_gff(gff_path)
 
             # we return a sequence collection which can be "called" by the CDS finder.
             # it has feature kind: CDS with qualifiers id and translation

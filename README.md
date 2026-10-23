@@ -11,7 +11,6 @@ starting...
 
 # Feature implementaton TODOs
 - Handle the sequence accession names better
-- Fromat parsing for faa vs fna
 - embl and ncbi input
 - Decide which other information to optionally get from a genbank or even gff.
 - CDS finder
