@@ -104,7 +104,7 @@ class Protein:
 
     def __post_init__(self):
         assert isinstance(self.id, str)
-        assert isinstance(self.seq, pyhmmer.easel.DigitalSequence)
+        assert isinstance(self.seq, pyhmmer.easel.DigitalSequence), type(self.seq)
         assert self.seq.alphabet == pyhmmer.easel.Alphabet.amino()
         if self.tt is not None:
             assert isinstance(self.tt, int)

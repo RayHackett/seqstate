@@ -11,7 +11,6 @@ starting...
 
 # Feature implementaton TODOs
 - can I improve typing for sequencecollection.load ? not sure...
-- test faa only
 - Handle the sequence accession names better
 - embl and ncbi input
 - Decide which other information to optionally get from a genbank or even gff.

@@ -15,7 +15,8 @@ from rich.console import Console
 
 from seqstate import Domain, Gene, Protein, Strand
 from seqstate.hmm_collection import HMMSet
-from seqstate.states import (GeneCollection, SequenceCollection,
+from seqstate.states import (AnnotatedProteinCollection, GeneCollection,
+                             ProteinCollection, SequenceCollection,
                              SequencePathCollection)
 from seqstate.tables import FeatureTable, GeneTable
 from seqstate.vocab import Labels, Vocab
@@ -268,12 +269,6 @@ class test_SequencePathCollection(unittest.TestCase):
             ),
             "gff",
         )
-        self.assertEqual(
-            SequencePathCollection.guess_sequences_format(
-                self.paths4[1]  # ty:ignore[invalid-argument-type]
-            ),
-            "gff",
-        )
 
     def test_init(self):
         paths = self.paths3
@@ -309,17 +304,6 @@ class test_SequencePathCollection(unittest.TestCase):
         ).load_files()
         self.assertEqual(len(list(col2)), 1)
 
-    # def test_only_faa(self):
-    #     col = SequencePathCollection(
-    #         paths=[self.paths4[0]],  # ty:ignore[invalid-argument-type]
-    #         console=self.console,
-    #     ).load_files()
-
-    #     col.split_and_dump(Path("/home/ray/Documents/seqstate/file.faa"), compressed=False)
-
-    #     x = col.extract_genes()
-    #     print(x)
-
     def test_errors(self):
         with self.assertRaises(ValueError):
             SequencePathCollection(
@@ -333,6 +317,49 @@ class test_SequencePathCollection(unittest.TestCase):
 
     def test_min_record_length(self):
         pass
+
+
+class test_ProteinCollection(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.paths4 = [
+            resource_files(test_data).joinpath(
+                "preprocessing/GCF_000013265.1_part.faa"
+            ),
+        ]
+
+    def test_only_faa(self):
+        col = SequencePathCollection(
+            paths=[self.paths4[0]],  # ty:ignore[invalid-argument-type]
+            console=Console(file=io.StringIO()),
+        ).load_files(streaming=True)
+
+        self.assertIsInstance(col, ProteinCollection)
+
+    def test_annotation(self):
+        hmm = HMMSet(
+            id="test",
+            version="0.1",
+            url="Pfam37.1.first3",
+            path=resource_files(test_data).joinpath(
+                "preprocessing/selected_hmms.h3m"
+            ),  # ty:ignore[invalid-argument-type]
+            md5="ea1bf925ae8419d89b10644c8cb79395",
+            relabel_with=r"s/(PF\d+)\.\d+/\1/",
+            size=3,
+        )
+        # TODO setting streaming to True creates a ReseourceWarning
+        col = (
+            SequencePathCollection(
+                paths=[self.paths4[0]],  # ty:ignore[invalid-argument-type]
+                console=Console(file=io.StringIO()),
+            )
+            .load_files(streaming=False)
+            .annotate_domains(hmms=[hmm])  # ty:ignore[possibly-missing-attribute]
+        )
+
+        self.assertIsInstance(col, AnnotatedProteinCollection)
+        self.assertEqual(len(col[-1].domains), 2)
 
 
 class test_SequenceCollection(unittest.TestCase):

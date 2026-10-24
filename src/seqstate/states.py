@@ -442,12 +442,15 @@ class SequencePathCollection(Sequence[Path]):
 
             if self.format == "faa":
                 return ProteinCollection(
-                    Protein(
-                        id=s.name,  # ty:ignore[invalid-argument-type]
-                        seq=s.digital(),  # ty:ignore[unresolved-attribute]
-                        tt=None,
-                    )
-                    for s in seqs
+                    (
+                        Protein(
+                            id=s.name,  # ty:ignore[invalid-argument-type]
+                            seq=s,  # ty:ignore[invalid-argument-type]
+                            tt=None,
+                        )
+                        for s in seqs
+                    ),
+                    console=self.console,
                 )
             if streaming:
                 return SequenceCollection(
