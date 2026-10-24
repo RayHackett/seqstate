@@ -12,7 +12,7 @@ except ImportError:
 from rich.console import Console
 
 from seqstate.database import GenomeDatabase
-from seqstate.states import FeatureTable, GeneTable
+from seqstate.tables import FeatureTable, GeneTable
 from seqstate.vocab import Symbol
 from tests import test_data
 

@@ -10,8 +10,8 @@ starting...
 
 
 # Feature implementaton TODOs
-- right now sequence collection still collects the values into a list... fix
-- figure out what to do with faa sequence record. typing is wrong for one thing...
+- can I improve typing for sequencecollection.load ? not sure...
+- use pyhmmer for faa vs fna detection
 - Handle the sequence accession names better
 - embl and ncbi input
 - Decide which other information to optionally get from a genbank or even gff.
@@ -31,7 +31,7 @@ starting...
 - Link protein type with handling from peptides.py
 - write tests for HMMCollection class
 - Test speed maybe with lz4 compression of hmms. nominally, decompression rate should be better
-- can we save space in genetable and feature table by encoding protein_id better?
+- can we save space in genetable and feature table by index protein_id - joining would always have to be on seq_id + protein_id?
 
 ## Features for Gecco
 

@@ -16,7 +16,7 @@ import rich.progress
 from rich.console import Console
 
 from seqstate.featureizer import Featureizer
-from seqstate.states import FeatureTable, GeneTable, LabeledGeneTable
+from seqstate.tables import FeatureTable, GeneTable, LabeledGeneTable
 from seqstate.vocab import Labels, SpecialLabel, Symbol, Vocab
 
 # strand conversion to integer

@@ -292,7 +292,6 @@ class test_SequencePathCollection(unittest.TestCase):
 
     def test_gff(self):
         col = SequencePathCollection(
-            format="faa+gff",
             paths=self.paths4,  # ty:ignore[invalid-argument-type]
             console=self.console,
         ).load_files()
@@ -509,7 +508,6 @@ class test_GeneCollection(unittest.TestCase):
             SequencePathCollection(
                 paths=[Path(outdir, "file.gff"), Path(outdir, "file.faa")],
                 console=self.console,
-                format="faa+gff",
             )
             .load_files(streaming=False)
             .extract_genes(
@@ -542,7 +540,6 @@ class test_GeneCollection(unittest.TestCase):
             SequencePathCollection(
                 paths=[Path(outdir, "file.gff"), Path(outdir, "file.faa")],
                 console=self.console,
-                format="faa+gff",
             )
             .load_files(streaming=False)
             .extract_genes(

@@ -9,8 +9,10 @@ from collections.abc import Callable
 from functools import partial
 from itertools import chain, groupby
 from pathlib import Path
-from typing import (Collection, Iterable, Iterator, Sequence, Sized, TextIO,
-                    Union, overload)
+from typing import (Collection, Iterable, Iterator, Literal, Sequence, Sized,
+                    TextIO, Union, overload)
+
+from pyhmmer.easel import AA
 
 # batched was introduced in python 3.12
 try:
@@ -35,22 +37,23 @@ from rich.console import Console
 from seqstate import Domain, Gene, Protein, Strand
 from seqstate.gene_callers import CDSFinder, PyrodigalFinder
 from seqstate.hmm_collection import HMMSet
+from seqstate.tables import FeatureTable, GeneTable
 from seqstate.utils import zopen
 
 
 class SequencePathCollection(Sequence[Path]):
     """A collection of file paths to genomic sequence files"""
 
+    FORMATS = Literal["genbank", "faa", "fna", "ncbi", "embl", "gff"]
+
     def __init__(
         self,
         paths: Iterable[Path],
-        format: str | None = None,
         console: Console | None = None,
     ):
 
         self.paths = list(paths)
         self.console = console if console is not None else Console()
-        self.format = format
 
         for path in self.paths:
             if not isinstance(path, Path):
@@ -62,6 +65,8 @@ class SequencePathCollection(Sequence[Path]):
                     ) from e
             if not path.is_file():
                 raise FileNotFoundError(f"Path {str(path.resolve())} is missing!")
+
+        self.format = self._check_format()
 
     def __len__(self) -> int:
         return len(self.paths)
@@ -76,9 +81,9 @@ class SequencePathCollection(Sequence[Path]):
         return self.paths[idx]
 
     @staticmethod
-    def guess_sequences_format(path: Union[str, Path]) -> str | None:
+    def guess_sequences_format(path: Union[str, Path]) -> FORMATS | None:
 
-        def _fasta_kind(sequence: bytes) -> str:
+        def _fasta_kind(sequence: bytes) -> Literal["faa", "fna"]:
             non_nt = len(sequence.translate(None, delete=b"ACGTUNacgtun"))
             # no dna seq should have more than 10% ATCGUN
             return "fna" if non_nt * 10 <= len(sequence) else "faa"
@@ -102,6 +107,19 @@ class SequencePathCollection(Sequence[Path]):
 
         return None
 
+    def _check_format(self) -> FORMATS | None:
+        formats = [self.guess_sequences_format(p) for p in self.paths]
+        if formats[0] is not None and all(f == formats[0] for f in formats):
+            return formats[0]
+
+        elif len(self.paths) == 2 and {*formats[:2]} == {"gff", "faa"}:
+            return "gff+faa"
+
+        else:
+            if "faa" in formats:
+                raise ValueError("Got mixed input genomic and faa sequence files!")
+            return None
+
     @classmethod
     def _load_records(
         cls,
@@ -109,7 +127,7 @@ class SequencePathCollection(Sequence[Path]):
         format: str | None = None,
         console: Console | None = None,
         streaming: bool = True,
-    ) -> Iterable[gb_io.Record]:
+    ) -> Iterable[gb_io.Record | pyhmmer.easel.DigitalSequence[AA]]:
 
         if console is None:
             console = Console()
@@ -196,13 +214,31 @@ class SequencePathCollection(Sequence[Path]):
 
         console.print(f"Loaded {n} sequences from {str(path)!r}")
 
+    @overload
     def _iter_sequences(
         self,
         paths: list[Path],
         streaming: bool,
+        format: Literal["faa"],
         min_record_length: int = 0,
+    ) -> Iterable[pyhmmer.easel.DigitalSequence[AA]]: ...
+
+    @overload
+    def _iter_sequences(
+        self,
+        paths: list[Path],
+        streaming: bool,
+        format: FORMATS | None = None,
+        min_record_length: int = 0,
+    ) -> Iterable[gb_io.Record]: ...
+
+    def _iter_sequences(
+        self,
+        paths: list[Path],
+        streaming: bool,
         format: str | None = None,
-    ) -> Iterable[gb_io.Record]:
+        min_record_length: int = 0,
+    ) -> Iterable[gb_io.Record] | Iterable[pyhmmer.easel.DigitalSequence[AA]]:
         unique_accessions: set[str] = set()
 
         if format is None:
@@ -305,15 +341,14 @@ class SequencePathCollection(Sequence[Path]):
         self,
         min_record_length: int = 0,
         streaming: bool = False,
-    ) -> SequenceCollection:
+    ) -> SequenceCollection | ProteinCollection:
 
         if min_record_length > 0:
             self.console.print(
                 f"Skipping sequences with fewer than {min_record_length} bases"
             )
 
-        faa_path, gff_path = None, None
-        if len(self.paths) == 2 and (self.format is None or self.format == "faa+gff"):
+        if self.format == "gff+faa":
 
             guess1 = self.guess_sequences_format(self.paths[0])
             guess2 = self.guess_sequences_format(self.paths[1])
@@ -323,7 +358,6 @@ class SequencePathCollection(Sequence[Path]):
             elif guess2 == "faa" and guess1 == "gff":
                 faa_path, gff_path = self.paths[1], self.paths[0]
 
-        if faa_path is not None and gff_path is not None:
             if streaming:
                 raise ValueError("No streaming support with faa+gff format!")
 
@@ -399,24 +433,30 @@ class SequencePathCollection(Sequence[Path]):
             )
 
         else:
+            seqs = self._iter_sequences(
+                paths=self.paths,
+                streaming=streaming,
+                min_record_length=min_record_length,
+                format=self.format,
+            )
+
+            if self.format == "faa":
+                return ProteinCollection(
+                    Protein(
+                        id=s.name,  # ty:ignore[invalid-argument-type]
+                        seq=s.digital(),  # ty:ignore[unresolved-attribute]
+                        tt=None,
+                    )
+                    for s in seqs
+                )
             if streaming:
                 return SequenceCollection(
-                    sequences=self._iter_sequences(
-                        paths=self.paths,
-                        streaming=streaming,
-                        min_record_length=min_record_length,
-                    ),
+                    sequences=seqs,
                     console=self.console,
                 )
             else:
                 return SequenceCollection(
-                    sequences=list(
-                        self._iter_sequences(
-                            paths=self.paths,
-                            streaming=streaming,
-                            min_record_length=min_record_length,
-                        )
-                    ),
+                    sequences=list(seqs),
                     console=self.console,
                 )
 
