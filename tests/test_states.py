@@ -429,7 +429,7 @@ class test_GeneCollection(unittest.TestCase):
         new = featured_seq_col.extract_genes(
             call_genes=False,
             cds_feature="CDS",
-            streaming=False,
+            streaming=True,
         )
         self.assertEqual(list(gene_collection.genes), list(new.genes))
 
@@ -458,8 +458,8 @@ class test_GeneCollection(unittest.TestCase):
                 paths=[Path(self.tempfile.name)],
                 console=self.console,
             )
-            .load_files(streaming=False)
-            .extract_genes(call_genes=False, streaming=False)
+            .load_files(streaming=True)
+            .extract_genes(call_genes=False, streaming=True)
         )
         self.assertEqual(list(gene_collection.genes), list(new.genes))
 
@@ -479,12 +479,12 @@ class test_GeneCollection(unittest.TestCase):
             .extract_genes(
                 call_genes=False,
                 cds_feature="CDS",
-                streaming=False,
+                streaming=True,
             )
         )
         self.assertEqual(list(gene_collection.genes), list(new.genes))
 
-    def test_roundtrip_via_io_gbk(self):
+    def test_roundtrip_via_io_gff(self):
         gene_collection = (
             SequencePathCollection(
                 self.paths2,  # ty:ignore[invalid-argument-type]
@@ -512,7 +512,7 @@ class test_GeneCollection(unittest.TestCase):
             .extract_genes(
                 call_genes=False,
                 cds_feature="CDS",
-                streaming=False,
+                streaming=True,
             )
         )
         self.assertEqual(list(gene_collection.genes), list(new.genes))

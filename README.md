@@ -10,6 +10,7 @@ starting...
 
 
 # Feature implementaton TODOs
+- figure out what to do with faa sequence record. typing is wrong for one thing...
 - Handle the sequence accession names better
 - embl and ncbi input
 - Decide which other information to optionally get from a genbank or even gff.

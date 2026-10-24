@@ -32,7 +32,7 @@ import rich.progress
 from pyhmmer.hmmer import hmmsearch
 from rich.console import Console
 
-from seqstate import Domain, Gene, Strand
+from seqstate import Domain, Gene, Protein, Strand
 from seqstate.featureizer import Featureizer
 from seqstate.gene_callers import CDSFinder, PyrodigalFinder
 from seqstate.hmm_collection import HMMSet
@@ -188,12 +188,7 @@ class SequencePathCollection(Sequence[Path]):
                             format="fasta",
                         )
                     ):
-                        yield gb_io.Record(
-                            accession=seq.name.split()[0],
-                            sequence=seq.textize().sequence.lower().encode("ascii"),
-                            molecule_type="protein",
-                            length=len(seq),
-                        )
+                        yield seq
                         n += 1
                 else:
                     raise NotImplementedError(f"Unknown format {format}")
@@ -210,7 +205,7 @@ class SequencePathCollection(Sequence[Path]):
         min_record_length: int = 0,
         format: str | None = None,
     ) -> Iterable[gb_io.Record]:
-        unique_contigs: set[str] = set()
+        unique_accessions: set[str] = set()
 
         if format is None:
             format = self.format
@@ -223,13 +218,20 @@ class SequencePathCollection(Sequence[Path]):
                 console=self.console,
                 streaming=streaming,
             ):
-                if record.accession is None or not record.accession:
-                    raise ValueError(f"A sequence from {str(p)} has no accession!")
-                if record.accession in unique_contigs:
-                    raise ValueError(f"Duplicate sequence accession {record.accession}")
-                unique_contigs.add(record.accession)
+                if isinstance(record, gb_io.Record):
+                    acc = record.accession
+                    length = record.length
+                else:
+                    acc = record.name
+                    length = len(record)
 
-                if record.length is not None and record.length >= min_record_length:
+                if acc is None or not acc:
+                    raise ValueError(f"A sequence from {str(p)} has no accession!")
+                if acc in unique_accessions:
+                    raise ValueError(f"Duplicate sequence accession {acc}")
+                unique_accessions.add(acc)
+
+                if length is not None and length >= min_record_length:
                     yield record
                 else:
                     discarded_seqs += 1
@@ -337,13 +339,14 @@ class SequencePathCollection(Sequence[Path]):
                 streaming=False,
                 format="faa",
             )
+
             # NOTE:
             # i materialize the prot_records here. this is expensive
             # but i do it in case gff and faa file are not ordered the same
             # if they are ordered, we could just always take the next protein
 
             # _iter_sequences guarantees unique accessions
-            prot_dict = {prot.accession: prot.sequence for prot in prot_records}
+            prot_dict = {prot.name: prot for prot in prot_records}
             gff_df = self._parse_gff(gff_path)
 
             # we return a sequence collection which can be "called" by the CDS finder.
@@ -376,7 +379,7 @@ class SequencePathCollection(Sequence[Path]):
                             gb_io.Qualifier(key="locus_tag", value=row[4]),
                             gb_io.Qualifier(
                                 key="translation",
-                                value=prot_seq.decode("ascii"),
+                                value=prot_seq.textize().sequence.lower(),
                             ),
                             # gb_io.Qualifier(
                             #     key="transl_table",
@@ -588,8 +591,178 @@ class SequenceCollection(Iterable[gb_io.Record]):
             return GeneCollection(genes=genes, jobs=jobs, console=self.console)
 
 
+class ProteinCollection(Iterable[Protein]):
+    """A collection of Protein objects"""
+
+    def __init__(
+        self,
+        proteins: Iterable[Protein],
+        jobs: int = 0,
+        console: Console | None = None,
+    ):
+        self.proteins = proteins
+        self.console = console if console is not None else Console()
+        self.jobs = jobs
+
+    def __len__(self) -> int:
+        if isinstance(self.proteins, Sized):
+            return len(self.proteins)
+        else:
+            return 0
+
+    def __iter__(self) -> Iterator[Protein]:
+        return iter(self.proteins)
+
+    def annotate_domains(
+        self,
+        hmms: list[HMMSet],
+        whitelist: Collection[str] | None = None,
+        bit_cutoffs: str | None = None,
+        pvalue_filter: float | None = None,
+        evalue_filter: float | None = None,
+    ) -> AnnotatedProteinCollection:
+        """Run all HMMs over ORFs to annotate with protein domains"""
+        # I must materialize it here because i iterate over hmms
+        # pyhmmer materializes anyway
+        proteins = list(self.proteins)
+        if not proteins:
+            raise ValueError("Didnt get any proteins!")
+
+        with rich.progress.Progress(
+            *rich.progress.Progress.get_default_columns(),
+            rich.progress.TimeElapsedColumn(),
+            rich.progress.MofNCompleteColumn(),
+            console=self.console,
+        ) as progress:
+            task_hmms = progress.add_task(
+                description="Annotating HMMs",
+                unit="file" if len(hmms) == 1 else "files",
+                total=len(hmms),
+                precision="",
+            )
+            task_domains = progress.add_task(description="", unit="HMMs", precision="")
+
+            def callback(h, t):
+                progress.update(task_domains, advance=1)
+
+            for hmm in progress.track(hmms, task_id=task_hmms, total=len(hmms)):
+                progress.update(
+                    task_domains,
+                    description=f" {hmm.id} v{hmm.version}",
+                    total=len(whitelist) if whitelist is not None else hmm.size,
+                )
+                self.console.print(
+                    f"Starting annotation with [bold blue]{hmm.id} v{hmm.version}[/]"
+                )
+                pyhmmer = PyHMMER(
+                    hmm=hmm,
+                    cpus=self.jobs,
+                    whitelist=whitelist,
+                    bit_cutoffs=bit_cutoffs,
+                    pvalue_filter=pvalue_filter,
+                    evalue_filter=evalue_filter,
+                    console=self.console,
+                )
+                proteins = pyhmmer.run(
+                    seqs=proteins,
+                    progress=callback,
+                )
+                self.console.print(
+                    f"Finished annotation with [bold blue]{hmm.id} v{hmm.version}[/]"
+                )
+            progress.update(task_id=task_domains, visible=False)
+
+        # Count number of annotated domains
+        count = sum(len(protein.domains) for protein in proteins)
+        self.console.print(f"Found {count} domains across all proteins")
+
+        # NOTE no disentangling;
+        # annotating with different sets of HMMs will produce different results
+        # after disentangling. therefore I discourage disentangling in general.
+        # If nonetheless required, disentangle on the feature table with the Featureizer
+        # or (preferred) on an AnnotatedGeneCollection object.
+
+        return AnnotatedProteinCollection(proteins=proteins, console=self.console)
+
+    def dump(self, output: Path):
+        # TODO compression
+        output = Path(output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        faa_path = output.with_suffix(".faa")
+
+        with open(faa_path, "w") as faa_f:
+            for protein in self.proteins:
+                faa_str = protein.to_faa()
+                faa_f.write(faa_str)
+                if not faa_str.endswith("\n"):
+                    faa_f.write("\n")
+
+
+class AnnotatedProteinCollection(Sequence[Protein]):
+    """A collection of Protein objects annotated with domain information"""
+
+    def __init__(
+        self,
+        proteins: list[Protein],
+        console: Console | None = None,
+    ):
+        self.proteins = list(proteins)
+        self.console = console if console is not None else Console()
+
+    def __len__(self) -> int:
+        return len(self.proteins)
+
+    @overload
+    def __getitem__(self, idx: int) -> Protein: ...
+
+    @overload
+    def __getitem__(self, idx: slice) -> list[Protein]: ...
+
+    def __getitem__(self, idx: int | slice):  # ty:ignore[invalid-method-override]
+        return self.proteins[idx]
+
+    def disentangle_domains(self) -> AnnotatedProteinCollection:
+        self.console.print("Disentangling overlapping domains in each gene")
+        return AnnotatedProteinCollection(
+            proteins=[protein.disentangle() for protein in self.proteins],
+            console=self.console,
+        )
+
+    def create_table(self) -> polars.DataFrame:
+        tbl_data = collections.defaultdict(list)
+        for protein in self.proteins:
+            for domain in protein.domains:
+                tbl_data["protein_id"].append(protein.id)
+                tbl_data["domain"].append(domain.name)
+                tbl_data["hmm"].append(domain.hmm)
+                tbl_data["i_evalue"].append(domain.i_evalue)
+                tbl_data["pvalue"].append(domain.pvalue)
+                tbl_data["domain_start"].append(domain.start)
+                tbl_data["domain_end"].append(domain.end)
+                tbl_data["score"].append(domain.score)
+
+        if not tbl_data:
+            raise ValueError("Did not get any data for table!")
+
+        schema = {
+            "protein_id": polars.Utf8,
+            "domain": polars.Categorical("domain"),
+            "hmm": polars.Categorical("hmm"),
+            "i_evalue": polars.Float64,
+            "pvalue": polars.Float64,
+            "domain_start": polars.UInt32,
+            "domain_end": polars.UInt32,
+            "score": polars.Float32,
+        }
+
+        return polars.from_dict(
+            data=tbl_data,
+            schema_overrides=schema,
+        ).sort(by=["sequence_id", "start", "end", "domain_start", "domain_end"])
+
+
 class GeneCollection(Iterable[Gene]):
-    """A collection Gene items"""
+    """A collection of Gene objects"""
 
     def __init__(
         self,
@@ -606,15 +779,6 @@ class GeneCollection(Iterable[Gene]):
             return len(self.genes)
         else:
             return 0
-
-    # @overload
-    # def __getitem__(self, idx: int) -> Gene: ...
-
-    # @overload
-    # def __getitem__(self, idx: slice) -> list[Gene]: ...
-
-    # def __getitem__(self, idx: int | slice):
-    #     return self.genes[idx]
 
     def __iter__(self) -> Iterator[Gene]:
         return iter(self.genes)
@@ -674,72 +838,29 @@ class GeneCollection(Iterable[Gene]):
         pvalue_filter: float | None = None,
         evalue_filter: float | None = None,
     ) -> AnnotatedGeneCollection:
-
-        self.console.print(
-            f"Running HMMER domain annotation with pyhmmer {pyhmmer.__version__}"
+        proteins = list(
+            ProteinCollection(
+                console=self.console,
+                jobs=self.jobs,
+                proteins=(gene.protein for gene in self.genes),
+            )
+            .annotate_domains(
+                hmms=hmms,
+                whitelist=whitelist,
+                bit_cutoffs=bit_cutoffs,
+                pvalue_filter=pvalue_filter,
+                evalue_filter=evalue_filter,
+            )
+            .proteins
         )
-        if bit_cutoffs is not None:
-            self.console.print(f"Running HMMER with bit cutoffs {bit_cutoffs}")
-        if pvalue_filter is not None:
-            self.console.print(f"Running HMMER with pvalue_filter {pvalue_filter}")
-        if evalue_filter is not None:
-            self.console.print(f"Running HMMER with evalue_filter {evalue_filter}")
-        if whitelist is not None:
-            self.console.print(
-                f"Running HMMER with a whitelist of {len(whitelist)} hmms"
-            )
 
-        # Run all HMMs over ORFs to annotate with protein domains
+        # TODO improve this!!
 
-        with rich.progress.Progress(
-            *rich.progress.Progress.get_default_columns(),
-            rich.progress.TimeElapsedColumn(),
-            rich.progress.MofNCompleteColumn(),
-            console=self.console,
-        ) as progress:
-            task_hmms = progress.add_task(
-                description="Annotating HMMs",
-                unit="file" if len(hmms) == 1 else "files",
-                total=len(hmms),
-                precision="",
-            )
-            task_domains = progress.add_task(description="", unit="HMMs", precision="")
+        new_genes = []
+        for protein, gene in zip(proteins, self.genes, strict=True):
+            new_genes.append(gene.with_protein_domains(protein.domains))
 
-            def callback(h, t):
-                progress.update(task_domains, advance=1)
-
-            for hmm in progress.track(hmms, task_id=task_hmms, total=len(hmms)):
-                progress.update(
-                    task_domains,
-                    description=f" {hmm.id} v{hmm.version}",
-                    total=len(whitelist) if whitelist is not None else hmm.size,
-                )
-                self.console.print(
-                    f"Starting annotation with [bold blue]{hmm.id} v{hmm.version}[/]"
-                )
-                genes = PyHMMER(hmm, self.jobs, whitelist).run(
-                    self.genes,
-                    progress=callback,
-                    bit_cutoffs=bit_cutoffs,
-                    pvalue_filter=pvalue_filter,
-                    evalue_filter=evalue_filter,
-                )
-                self.console.print(
-                    f"Finished annotation with [bold blue]{hmm.id} v{hmm.version}[/]"
-                )
-            progress.update(task_id=task_domains, visible=False)
-
-        # Count number of annotated domains
-        count = sum(len(gene.protein.domains) for gene in genes)
-        self.console.print(f"Found {count} domains across all proteins")
-
-        # NOTE no disentangling;
-        # annotating with different sets of HMMs will produce different results
-        # after disentangling. therefore I discourage disentangling in general.
-        # If nonetheless required, disentangle on the feature table with the Featureizer
-        # or (preferred) on an AnnotatedGeneCollection object.
-
-        return AnnotatedGeneCollection(genes=genes, console=self.console)
+        return AnnotatedGeneCollection(genes=new_genes, console=self.console)
 
     def create_gene_table(self) -> GeneTable:
         tbl_data = collections.defaultdict(list)
@@ -749,6 +870,9 @@ class GeneCollection(Iterable[Gene]):
             tbl_data["start"].append(gene.start)
             tbl_data["end"].append(gene.end)
             tbl_data["strand"].append(gene.strand.sign)
+
+        if not tbl_data:
+            raise ValueError("Failed to get any Gene table data!")
 
         gene_df = polars.from_dict(
             data=tbl_data,
@@ -764,6 +888,8 @@ class GeneCollection(Iterable[Gene]):
 
     def dump(self, output: Path):
         """Dump the GeneCollection to a FASTA (.faa) and GFF3 (.gff) file."""
+        # TODO dump to genbank???
+        # TODO add compression
         output = Path(output)
         output.parent.mkdir(parents=True, exist_ok=True)
         gff_path = output.with_suffix(".gff")
@@ -789,7 +915,7 @@ class AnnotatedGeneCollection(Sequence[Gene]):
         genes: list[Gene],
         console: Console | None = None,
     ):
-        self.genes = genes
+        self.genes = list(genes)
         self.console = console if console is not None else Console()
 
     def __len__(self) -> int:
@@ -827,6 +953,9 @@ class AnnotatedGeneCollection(Sequence[Gene]):
                 tbl_data["domain_start"].append(domain.start)
                 tbl_data["domain_end"].append(domain.end)
                 tbl_data["score"].append(domain.score)
+
+        if not tbl_data:
+            raise ValueError("Failed to get any score table data!")
 
         schema = {
             "sequence_id": polars.Categorical("sequence_id"),
@@ -866,6 +995,9 @@ class AnnotatedGeneCollection(Sequence[Gene]):
                 tbl_data["pvalue"].append(domain.pvalue)
                 tbl_data["domain_start"].append(domain.start)
                 tbl_data["domain_end"].append(domain.end)
+
+        if not tbl_data:
+            raise ValueError("Failed to get any Feature table data!")
 
         schema = {
             "sequence_id": polars.Categorical("sequence_id"),
@@ -1235,7 +1367,7 @@ class FeatureTable:
                 featureizer.features.group_by("domain")
                 .agg(polars.len())
                 .filter(polars.col("len") >= min_domain_occurence)
-                .collect()["domain"]
+                .collect()["domain"]  # ty:ignore[not-subscriptable]
                 .sort()
                 .to_list()
             )
@@ -1261,8 +1393,12 @@ class PyHMMER:
     def __init__(
         self,
         hmm: HMMSet,
+        bit_cutoffs: str | None = None,
+        evalue_filter: float | None = None,
+        pvalue_filter: float | None = None,
         cpus: int | None = None,
         whitelist: Collection[str] | None = None,
+        console: rich.Console | None = None,
     ) -> None:
         """Prepare a new PyHMMER annotation handler with the given ``hmms``.
 
@@ -1276,22 +1412,47 @@ class PyHMMER:
 
         """
         self.hmm = hmm
+        self.bit_cutoffs = bit_cutoffs
+        self.evalue_filter = evalue_filter
+        self.pvalue_filter = pvalue_filter
         self.cpus = cpus
         self.whitelist = UniversalContainer() if whitelist is None else whitelist
+        self.console = console
 
-    # TODO should have a check to see if any of the HMMs in the whitelist
-    # ARE NOT in the self.hmm file....
+        if self.console is None:
+            self.console = rich.Console()
+
+        self.console.print(
+            f"Running HMMER domain annotation with pyhmmer {pyhmmer.__version__}"
+        )
+        if bit_cutoffs is not None:
+            self.console.print(f"Running HMMER with bit cutoffs {bit_cutoffs}")
+        if pvalue_filter is not None:
+            self.console.print(f"Running HMMER with pvalue_filter {pvalue_filter}")
+        if evalue_filter is not None:
+            self.console.print(f"Running HMMER with evalue_filter {evalue_filter}")
+        if whitelist is not None:
+            self.console.print(
+                f"Running HMMER with a whitelist of {len(whitelist)} hmms"
+            )
+
+        # TODO should have a check to see if any of the HMMs in the whitelist
+        # ARE NOT in the self.hmm file....
+
+        # TODO should check that the hmms are protein hmms?
+
+        # There are DNA hmms too.... this would require a rework right now!
 
     def run(
         self,
-        genes: Iterable[Gene],
+        seqs: Iterable[Protein],
         progress: Callable[[pyhmmer.plan7.HMM, int], None] | None = None,
-        bit_cutoffs: str | None = None,
-        evalue_filter: float | None = None,
-        pvalue_filter: float | None = None,
-    ) -> list[Gene]:
+    ) -> list[Protein]:
         # collect genes and keep them in original order
-        gene_index = list(genes)
+        seqs_idx = list(seqs)
+
+        if not seqs_idx:
+            raise ValueError("Didnt get any sequences!")
 
         if self.hmm.size is None:
             warnings.warn(
@@ -1305,8 +1466,12 @@ class PyHMMER:
         esl_sqs = pyhmmer.easel.DigitalSequenceBlock(
             alphabet=pyhmmer.easel.AA(),
         )
-        for i, gene in enumerate(gene_index):
-            seq = gene.protein.seq
+        for i, obj in enumerate(seqs_idx):
+            if isinstance(obj, Gene):
+                raise ValueError("karjarp")
+                seq = obj.protein.seq
+            else:
+                seq = obj.seq
             seq.name = str(i)
             esl_sqs.append(seq)
 
@@ -1332,10 +1497,10 @@ class PyHMMER:
             callback=progress,
             # We always keep this fixed to the hmm db size
             Z=self.hmm.size,
-            bit_cutoffs=bit_cutoffs,
+            bit_cutoffs=self.bit_cutoffs,
             # domE is the reporting theshold -
             # setting it means we are stricter than the inclusion threshold
-            domE=10 if evalue_filter is None else evalue_filter,
+            domE=10 if self.evalue_filter is None else self.evalue_filter,
         )
 
         # NOTE normally one would set Z to the total number of sequences
@@ -1374,7 +1539,10 @@ class PyHMMER:
                     assert domain.pvalue >= 0
 
                     # applying pvalue filter here - prefer this over e_value
-                    if pvalue_filter is not None and domain.pvalue > pvalue_filter:
+                    if (
+                        self.pvalue_filter is not None
+                        and domain.pvalue > self.pvalue_filter
+                    ):
                         continue
 
                     found_domains[idx].append(
@@ -1389,9 +1557,9 @@ class PyHMMER:
                         )
                     )
 
-        # Create a new Gene with the new protein
+        # Create a new Gene or Protein with the new protein
         for idx, domains in found_domains.items():
-            gene_index[idx] = gene_index[idx].with_protein_domains(domains)
+            seqs_idx[idx] = seqs_idx[idx].with_domains(domains)
 
-        # return the updated list of genes that was given in argument
-        return gene_index
+        # return the updated list of proteins or genes that was given in argument
+        return seqs_idx

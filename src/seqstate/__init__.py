@@ -92,21 +92,22 @@ class Protein:
     Attributes:
         id (`str`): The identifier of the protein.
         seq (`~pyhmmer.easel.DigitalSequence`): The sequence of amino-acids of this protein.
-        tt (`int`): The translation table used. Pyrodigal uses either 4 or 11
+        tt (`int` | `None`): The translation table used. Pyrodigal uses either 4 or 11
         domains (`list` of `~gecco.model.Domain`): A list of domains found
             in the protein sequence.
     """
 
     id: str  # i could rely on id of digital sequence but its better to keep it seperate
     seq: pyhmmer.easel.DigitalSequence[pyhmmer.easel.AA]
-    tt: int
+    tt: int | None
     domains: tuple[Domain, ...] = field(default_factory=tuple)
 
     def __post_init__(self):
         assert isinstance(self.id, str)
         assert isinstance(self.seq, pyhmmer.easel.DigitalSequence)
         assert self.seq.alphabet == pyhmmer.easel.Alphabet.amino()
-        assert isinstance(self.tt, int)
+        if self.tt is not None:
+            assert isinstance(self.tt, int)
         assert isinstance(self.domains, tuple)
         assert all(isinstance(domain, Domain) for domain in self.domains)
 
