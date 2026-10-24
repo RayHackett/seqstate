@@ -1,7 +1,6 @@
 starting...
 
 # Repo TODOs
-- Fix the cli call in the pyproject.toml
 - check over docstrings
 - Actually write a README.md
 - generate docs with sphinx

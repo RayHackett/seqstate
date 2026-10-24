@@ -43,4 +43,4 @@ Repository = "https://github.com/me/spam.git"
 Changelog = "https://github.com/me/spam/blob/master/CHANGELOG.md"
 
 [project.scripts]
-seqstate-cli = "seqstate:cli:cli"
+seqstate-cli = "seqstate.cli.__main__:main"
