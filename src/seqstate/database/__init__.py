@@ -7,7 +7,13 @@ import sqlite3
 import time
 import warnings
 from contextlib import ExitStack
-from importlib.resources.abc import Traversable
+
+try:
+    from importlib.resources.abc import \
+        TraversableResources  # ty:ignore[unresolved-import]
+except ImportError:  # Python < 3.11
+    from importlib.abc import TraversableResources
+
 from pathlib import Path
 
 import polars
@@ -33,8 +39,8 @@ STRANDS = polars.DataFrame(
 
 
 def check_db_schema(
-    db: Traversable | str | sqlite3.Connection,
-    schema_file: Traversable,
+    db: TraversableResources | str | sqlite3.Connection,
+    schema_file: TraversableResources,
 ) -> bool:
     """
     Check if the database has the correct schema.
@@ -65,7 +71,7 @@ def check_db_schema(
             conn = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
             ctx.callback(conn.close)
 
-        elif isinstance(db, Traversable):
+        elif isinstance(db, TraversableResources):
             if not db.is_file():
                 raise ValueError("Traversable database must be a file")
 
@@ -140,7 +146,7 @@ class GenomeDatabase:
     SCHEMA_FILE = "schema_genome.sql"
 
     @classmethod
-    def schema(cls) -> Traversable:
+    def schema(cls) -> TraversableResources:
         return importlib.resources.files(__package__).joinpath(cls.SCHEMA_FILE)
 
     def __init__(
@@ -547,7 +553,7 @@ class LabeledGenomeDatabase(GenomeDatabase):
     SCHEMA_FILE = "schema_labeled_genome.sql"
 
     @classmethod
-    def schema(cls) -> Traversable:
+    def schema(cls) -> TraversableResources:
         return importlib.resources.files(__package__).joinpath(cls.SCHEMA_FILE)
 
     def __init__(self, path, conn):

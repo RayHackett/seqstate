@@ -214,31 +214,31 @@ class test_SequencePathCollection(unittest.TestCase):
     def setUpClass(cls):
         cls.paths1 = [
             resource_files(test_data).joinpath(
-                "preprocessing", "GCF_036527415.1.contigs1+2.fna"
+                "preprocessing/GCF_036527415.1.contigs1+2.fna"
             ),
         ]
         cls.paths2 = [
             resource_files(test_data).joinpath(
-                "preprocessing", "GCF_036527415.1.contigs1+2.fna"
+                "preprocessing/GCF_036527415.1.contigs1+2.fna"
             ),
             resource_files(test_data).joinpath(
-                "preprocessing", "GCF_036527415.1.contigs3_with_features.gbff.gz"
+                "preprocessing/GCF_036527415.1.contigs3_with_features.gbff.gz"
             ),
         ]
         cls.paths3 = [
             resource_files(test_data).joinpath(
-                "preprocessing", "GCF_036527415.1.contigs1+2.fna"
+                "preprocessing/GCF_036527415.1.contigs1+2.fna"
             ),
             resource_files(test_data).joinpath(
-                "preprocessing", "GCF_036527415.1.contigs1+2.fna"
+                "preprocessing/GCF_036527415.1.contigs1+2.fna"
             ),
         ]
         cls.paths4 = [
             resource_files(test_data).joinpath(
-                "preprocessing", "GCF_000013265.1_part.faa"
+                "preprocessing/GCF_000013265.1_part.faa"
             ),
             resource_files(test_data).joinpath(
-                "preprocessing", "GCF_000013265.1_part.gff"
+                "preprocessing/GCF_000013265.1_part.gff"
             ),
         ]
         cls.console = Console(file=io.StringIO())  # silent console
@@ -261,6 +261,12 @@ class test_SequencePathCollection(unittest.TestCase):
                 self.paths4[0]  # ty:ignore[invalid-argument-type]
             ),
             "faa",
+        )
+        self.assertEqual(
+            SequencePathCollection.guess_sequences_format(
+                self.paths4[1]  # ty:ignore[invalid-argument-type]
+            ),
+            "gff",
         )
         self.assertEqual(
             SequencePathCollection.guess_sequences_format(
@@ -378,19 +384,19 @@ class test_GeneCollection(unittest.TestCase):
     def setUpClass(cls):
         cls.paths1 = [
             resource_files(test_data).joinpath(
-                "preprocessing", "GCF_036527415.1.contigs1+2.fna"
+                "preprocessing/GCF_036527415.1.contigs1+2.fna"
             ),
         ]
         cls.paths2 = [
             resource_files(test_data).joinpath(
-                "preprocessing", "GCF_036527415.1.contigs3_with_features.gbff.gz"
+                "preprocessing/GCF_036527415.1.contigs3_with_features.gbff.gz"
             ),
         ]
 
         cls.console = Console(file=io.StringIO())  # silent console
 
         # create a temp dir
-        cls.tempdir = tempfile.TemporaryDirectory(delete=False)
+        cls.tempdir = tempfile.TemporaryDirectory()
 
         # create a temp file inside that dir
         cls.tempfile = tempfile.NamedTemporaryFile(
@@ -412,7 +418,7 @@ class test_GeneCollection(unittest.TestCase):
             version="0.1",
             url="Pfam37.1.first3",
             path=resource_files(test_data).joinpath(
-                "preprocessing", "selected_hmms.h3m"
+                "preprocessing/selected_hmms.h3m"
             ),  # ty:ignore[invalid-argument-type]
             md5="ea1bf925ae8419d89b10644c8cb79395",
             relabel_with=r"s/(PF\d+)\.\d+/\1/",
@@ -556,7 +562,7 @@ class test_AnnotatedGeneCollection(unittest.TestCase):
     def setUpClass(cls):
         cls.paths1 = [
             resource_files(test_data).joinpath(
-                "preprocessing", "GCF_036527415.1.contigs1+2.fna"
+                "preprocessing/GCF_036527415.1.contigs1+2.fna"
             ),
         ]
         cls.console = Console(file=io.StringIO())  # silent console
@@ -576,14 +582,14 @@ class test_AnnotatedGeneCollection(unittest.TestCase):
             version="0.1",
             url="Pfam37.1.first3",
             path=resource_files(test_data).joinpath(
-                "preprocessing", "selected_hmms.h3m"
+                "preprocessing/selected_hmms.h3m"
             ),  # ty:ignore[invalid-argument-type]
             md5="ea1bf925ae8419d89b10644c8cb79395",
             relabel_with=r"s/(PF\d+)\.\d+/\1/",
             size=3,
         )
         # create a temp dir
-        cls.tempdir = tempfile.TemporaryDirectory(delete=False)
+        cls.tempdir = tempfile.TemporaryDirectory()
 
         # create a temp file inside that dir
         cls.temp_tsv_file = tempfile.NamedTemporaryFile(
@@ -612,9 +618,7 @@ class test_AnnotatedGeneCollection(unittest.TestCase):
         with ExitStack() as ctx:
             f = ctx.enter_context(
                 open(
-                    resource_files(test_data).joinpath(
-                        "preprocessing", "genetable.tsv"
-                    ),
+                    resource_files(test_data).joinpath("preprocessing/genetable.tsv"),
                     "r",
                 )  # ty:ignore[no-matching-overload]
             )
@@ -646,7 +650,7 @@ class test_AnnotatedGeneCollection(unittest.TestCase):
             f = ctx.enter_context(
                 open(
                     resource_files(test_data).joinpath(
-                        "preprocessing", "featuretable.tsv"
+                        "preprocessing/featuretable.tsv"
                     ),
                     "r",
                 )  # ty:ignore[no-matching-overload]
@@ -736,7 +740,7 @@ class test_AnnotatedGeneCollection(unittest.TestCase):
         tbl = FeatureTable.load(self.temp_tsv_file2.name)
         expected = FeatureTable.load(
             resource_files(test_data).joinpath(
-                "preprocessing", "featuretable.tsv"
+                "preprocessing/featuretable.tsv"
             ),  # ty:ignore[invalid-argument-type]
         ).table.collect()
 
@@ -761,7 +765,7 @@ class test_AnnotatedGeneCollection(unittest.TestCase):
     def test_build_labels(self):
         genes = GeneTable.load(
             resource_files(test_data).joinpath(
-                "preprocessing", "genetable.tsv"
+                "preprocessing/genetable.tsv"
             ),  # ty:ignore[invalid-argument-type]
         )
         # boolean but not 1:1 mapping

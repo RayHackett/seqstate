@@ -10,7 +10,7 @@ from functools import partial
 from itertools import chain, groupby
 from pathlib import Path
 from typing import (Collection, Iterable, Iterator, Literal, Sequence, Sized,
-                    TextIO, Union, overload)
+                    TextIO, overload)
 
 from pyhmmer.easel import AA
 
@@ -44,7 +44,9 @@ from seqstate.utils import zopen
 class SequencePathCollection(Sequence[Path]):
     """A collection of file paths to genomic sequence files"""
 
-    FORMATS = Literal["genbank", "faa", "fna", "ncbi", "embl", "gff"]
+    FORMATS = Literal[
+        "genbank", "faa", "fna", "ncbi", "embl", "gff", "gff+faa", "fasta"
+    ]
 
     def __init__(
         self,
@@ -81,36 +83,31 @@ class SequencePathCollection(Sequence[Path]):
         return self.paths[idx]
 
     @staticmethod
-    def guess_sequences_format(path: Union[str, Path]) -> FORMATS | None:
-
-        def _fasta_kind(sequence: bytes) -> Literal["faa", "fna"]:
-            non_nt = len(sequence.translate(None, delete=b"ACGTUNacgtun"))
-            # no dna seq should have more than 10% ATCGUN
-            return "fna" if non_nt * 10 <= len(sequence) else "faa"
-
-        with zopen(path, mode="rb") as fh:
-            for line in fh:
+    def guess_sequences_format(path: Path) -> str:
+        with zopen(path, mode="rb") as f:
+            for line in f:
                 line = line.strip()
                 if line:
                     break
-                else:
-                    return None
-
-            if line.startswith(b">"):
-                return _fasta_kind((next(fh, b"").strip()))
-            elif line.startswith(b"LOCUS"):
-                return "genbank"
-            elif line.startswith(b"ID "):
-                return "embl"
-            elif line.startswith(b"##gff-version 3"):
+            if line.startswith(b"##gff-version 3"):
                 return "gff"
-
-        return None
+            f.seek(0)
+            with pyhmmer.easel.SequenceFile(f) as seqfile:
+                if seqfile.format == "fasta":
+                    subf = seqfile.guess_alphabet()
+                    if isinstance(subf, pyhmmer.easel.AA):
+                        return "faa"
+                    elif isinstance(subf, pyhmmer.easel.DNA):
+                        return "fna"
+                    else:
+                        return "fasta"
+                else:
+                    return seqfile.format
 
     def _check_format(self) -> FORMATS | None:
         formats = [self.guess_sequences_format(p) for p in self.paths]
         if formats[0] is not None and all(f == formats[0] for f in formats):
-            return formats[0]
+            return formats[0]  # ty:ignore[invalid-return-type]
 
         elif len(self.paths) == 2 and {*formats[:2]} == {"gff", "faa"}:
             return "gff+faa"
@@ -118,6 +115,9 @@ class SequencePathCollection(Sequence[Path]):
         else:
             if "faa" in formats:
                 raise ValueError("Got mixed input genomic and faa sequence files!")
+            for f in formats:
+                if f not in ["faa", "fna", "genbank", "embl", "ncbi"]:
+                    raise ValueError(f"Got odd format {f}")
             return None
 
     @classmethod

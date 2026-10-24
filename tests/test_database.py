@@ -23,18 +23,18 @@ class test_GenomeDatabase(unittest.TestCase):
 
         cls.genes = GeneTable.load(
             resource_files(test_data).joinpath(
-                "preprocessing", "genetable.tsv"
+                "preprocessing/genetable.tsv"
             ),  # ty:ignore[invalid-argument-type]
         )
         cls.features = FeatureTable.load(
             resource_files(test_data).joinpath(
-                "preprocessing", "featuretable.tsv"
+                "preprocessing/featuretable.tsv"
             ),  # ty:ignore[invalid-argument-type]
         )
 
         cls.console = Console(file=io.StringIO())  # silent console
         # create a temp dir
-        cls.tempdir = tempfile.TemporaryDirectory(delete=False)
+        cls.tempdir = tempfile.TemporaryDirectory()
 
         # # create a temp file inside that dir
         # cls.temp_db = tempfile.NamedTemporaryFile(
