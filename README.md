@@ -10,6 +10,7 @@ starting...
 
 
 # Feature implementaton TODOs
+- right now sequence collection still collects the values into a list... fix
 - figure out what to do with faa sequence record. typing is wrong for one thing...
 - Handle the sequence accession names better
 - embl and ncbi input

@@ -6,8 +6,8 @@ from . import test_database, test_featureizer, test_hmms, test_states
 To run the tests:
 
 export PYTHONPATH='/home/ray/Documents/seqstate/src/'
-python -m unittest discover -s /home/ray/Documents/seqstate/tests/
-
+cd /home/ray/Documents/seqstate
+python -m unittest discover tests/
 """
 
 

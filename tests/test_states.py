@@ -406,6 +406,41 @@ class test_GeneCollection(unittest.TestCase):
         cls.tempfile.close()
         shutil.rmtree(Path(tempfile.gettempdir(), cls.tempdir.name))
 
+    def test_annotation(self):
+        hmm = HMMSet(
+            id="test",
+            version="0.1",
+            url="Pfam37.1.first3",
+            path=resource_files(test_data).joinpath(
+                "preprocessing", "selected_hmms.h3m"
+            ),  # ty:ignore[invalid-argument-type]
+            md5="ea1bf925ae8419d89b10644c8cb79395",
+            relabel_with=r"s/(PF\d+)\.\d+/\1/",
+            size=3,
+        )
+
+        ann_gene_col = (
+            SequencePathCollection(
+                self.paths2,  # ty:ignore[invalid-argument-type]
+                console=self.console,
+            )
+            .load_files()
+            .extract_genes(
+                call_genes=False,
+                cds_feature="CDS",
+                streaming=True,
+            )
+            .annotate_domains(
+                hmms=[hmm],
+            )
+        )
+
+        self.assertEqual(len(ann_gene_col[105].protein.domains), 2)
+        self.assertEqual(len(ann_gene_col[106].protein.domains), 14)
+        self.assertEqual(len(ann_gene_col[148].protein.domains), 12)
+        self.assertEqual(len(ann_gene_col[167].protein.domains), 1)
+        self.assertEqual(len(ann_gene_col[198].protein.domains), 1)
+
     def test_rounttrip_via_featured_seq_collection(self):
         # TODO!
         # warnings because of invalid CDS sequences which are not multiples of 3

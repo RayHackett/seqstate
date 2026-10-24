@@ -770,7 +770,7 @@ class GeneCollection(Iterable[Gene]):
         jobs: int = 0,
         console: Console | None = None,
     ):
-        self.genes = genes  # list(genes)
+        self.genes = genes
         self.console = console if console is not None else Console()
         self.jobs = jobs
 
@@ -838,29 +838,25 @@ class GeneCollection(Iterable[Gene]):
         pvalue_filter: float | None = None,
         evalue_filter: float | None = None,
     ) -> AnnotatedGeneCollection:
-        proteins = list(
-            ProteinCollection(
-                console=self.console,
-                jobs=self.jobs,
-                proteins=(gene.protein for gene in self.genes),
-            )
-            .annotate_domains(
-                hmms=hmms,
-                whitelist=whitelist,
-                bit_cutoffs=bit_cutoffs,
-                pvalue_filter=pvalue_filter,
-                evalue_filter=evalue_filter,
-            )
-            .proteins
+
+        genes = list(self.genes)
+
+        ann_proteins = ProteinCollection(
+            console=self.console,
+            jobs=self.jobs,
+            proteins=(gene.protein for gene in genes),
+        ).annotate_domains(
+            hmms=hmms,
+            whitelist=whitelist,
+            bit_cutoffs=bit_cutoffs,
+            pvalue_filter=pvalue_filter,
+            evalue_filter=evalue_filter,
         )
 
-        # TODO improve this!!
+        for i, (protein, gene) in enumerate(zip(ann_proteins, genes, strict=True)):
+            genes[i] = gene.with_protein_domains(protein.domains)
 
-        new_genes = []
-        for protein, gene in zip(proteins, self.genes, strict=True):
-            new_genes.append(gene.with_protein_domains(protein.domains))
-
-        return AnnotatedGeneCollection(genes=new_genes, console=self.console)
+        return AnnotatedGeneCollection(genes=genes, console=self.console)
 
     def create_gene_table(self) -> GeneTable:
         tbl_data = collections.defaultdict(list)
@@ -1372,7 +1368,11 @@ class FeatureTable:
                 .to_list()
             )
         else:
-            domains = featureizer.features.collect()["domain"].sort().to_list()
+            domains = (
+                featureizer.features.collect()["domain"]  # ty:ignore[not-subscriptable]
+                .sort()
+                .to_list()
+            )
 
         return Vocab.from_iterator(domains), featureizer.features.collect()
 
