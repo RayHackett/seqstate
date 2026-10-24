@@ -15,7 +15,7 @@ from seqstate.cli._parser import (configure_build_vocab_input,
                                   configure_general_arguments)
 from seqstate.cli.utils import create_versioned_path
 from seqstate.database import GenomeDatabase
-from seqstate.states import FeatureTable, GeneTable
+from seqstate.tables import FeatureTable, GeneTable
 
 """
 export PYTHONPATH='/home/ray/Documents/seqstate/src/'

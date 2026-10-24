@@ -15,8 +15,9 @@ from rich.console import Console
 
 from seqstate import Domain, Gene, Protein, Strand
 from seqstate.hmm_collection import HMMSet
-from seqstate.states import (FeatureTable, GeneCollection, GeneTable,
-                             SequenceCollection, SequencePathCollection)
+from seqstate.states import (GeneCollection, SequenceCollection,
+                             SequencePathCollection)
+from seqstate.tables import FeatureTable, GeneTable
 from seqstate.vocab import Labels, Vocab
 from tests import test_data
 

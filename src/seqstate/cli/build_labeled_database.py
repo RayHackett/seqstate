@@ -10,7 +10,7 @@ from rich.console import Console
 from seqstate.cli._parser import configure_general_arguments
 from seqstate.cli.utils import create_versioned_path
 from seqstate.database import LabeledGenomeDatabase
-from seqstate.states import FeatureTable, GeneTable
+from seqstate.tables import FeatureTable, GeneTable
 from seqstate.utils import is_parquet_file
 from seqstate.vocab import Labels, Vocab
 

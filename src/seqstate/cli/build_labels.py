@@ -15,7 +15,7 @@ from rich.console import Console
 from seqstate.cli._parser import (configure_build_vocab_input,
                                   configure_general_arguments)
 from seqstate.cli.utils import create_versioned_path
-from seqstate.states import GeneTable
+from seqstate.tables import GeneTable
 from seqstate.utils import is_parquet_file
 from seqstate.vocab import Labels
 
