@@ -8,8 +8,6 @@ from contextlib import ExitStack
 from pathlib import Path
 from typing import BinaryIO, ContextManager, TextIO, overload
 
-from numba.cuda.cudadrv.runtime import Runtime
-
 if sys.version_info >= (3, 14):
     from compression import zstd
 else:
