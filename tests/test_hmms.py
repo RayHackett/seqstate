@@ -17,8 +17,7 @@ class test_HMM(unittest.TestCase):
             version="0.1",
             url="Pfam37.1.first3",
             path=resource_files(test_data).joinpath(
-                "preprocessing",
-                "selected_hmms.h3m",  # ty:ignore[too-many-positional-arguments]
+                "preprocessing/selected_hmms.h3m",
             ),  # ty:ignore[invalid-argument-type]
             md5="ea1bf925ae8419d89b10644c8cb79395",
             size=3,
@@ -36,8 +35,7 @@ class test_HMM(unittest.TestCase):
                 version="0.1",
                 url="Pfam37.1.first3",
                 path=resource_files(test_data).joinpath(
-                    "preprocessing",
-                    "selected_hmms.h3m",  # ty:ignore[too-many-positional-arguments]
+                    "preprocessing/selected_hmms.h3m",
                 ),  # ty:ignore[invalid-argument-type]
                 md5="fa1bf925ae8419d89b10644c8cb79395",
                 relabel_with=r"s/(PF\d+)\.\d+/\1/",
@@ -48,8 +46,7 @@ class test_HMM(unittest.TestCase):
                 version="0.1",
                 url="Pfam37.1.first3",
                 path=resource_files(test_data).joinpath(
-                    "preprocessing",
-                    "nofile.hmm.h3m",  # ty:ignore[too-many-positional-arguments]
+                    "preprocessing/nofile.hmm.h3m",
                 ),  # ty:ignore[invalid-argument-type]
                 relabel_with=r"s/(PF\d+)\.\d+/\1/",
             )
@@ -60,8 +57,7 @@ class test_HMM(unittest.TestCase):
             version="0.1",
             url=None,
             path=resource_files(test_data).joinpath(
-                "preprocessing",
-                "6hmms.hmm.zst",  # ty:ignore[too-many-positional-arguments]
+                "preprocessing/6hmms.hmm.zst",
             ),  # ty:ignore[invalid-argument-type]
             md5="72ee2075eb3285f844ff90306f318905",
             size=6,

@@ -658,7 +658,7 @@ class test_AnnotatedGeneCollection(unittest.TestCase):
         tbl = GeneTable.load(self.temp_tsv_file.name)
         expected = GeneTable.load(
             resource_files(test_data).joinpath(
-                "preprocessing", "genetable.tsv"
+                "preprocessing/genetable.tsv"
             ),  # ty:ignore[invalid-argument-type]
         ).table.collect()
 
@@ -730,8 +730,7 @@ class test_AnnotatedGeneCollection(unittest.TestCase):
                     size=23794,
                     url=None,
                     path=resource_files(test_data).joinpath(
-                        "preprocessing",
-                        "6hmms.hmm.zst",  # ty:ignore[too-many-positional-arguments]
+                        "preprocessing/6hmms.hmm.zst",
                     ),  # ty:ignore[invalid-argument-type]
                     relabel_with=r"s/(PF\d+)\.\d+/\1/",
                 )
@@ -783,7 +782,7 @@ class test_AnnotatedGeneCollection(unittest.TestCase):
 
         genes = GeneTable.load(
             resource_files(test_data).joinpath(
-                "preprocessing", "genetable.tsv"
+                "preprocessing/genetable.tsv"
             ),  # ty:ignore[invalid-argument-type]
         )
         vocab, _ = tbl.build_vocab(console=self.console, genes=genes)
