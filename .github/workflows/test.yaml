@@ -29,9 +29,9 @@ jobs:
         - python-version: "3.14"
           python-release: v3.14
           python-impl: CPython
-        - python-version: "3.15"
-          python-release: v3.15
-          python-impl: CPython
+        # - python-version: "3.15" # no isal support yet
+        #   python-release: v3.15
+        #   python-impl: CPython
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -81,9 +81,9 @@ jobs:
         - python-version: "3.14"
           python-release: v3.14
           python-impl: CPython
-        - python-version: "3.15"
-          python-release: v3.15
-          python-impl: CPython
+        # - python-version: "3.15" # no isal support yet
+        #   python-release: v3.15
+        #   python-impl: CPython
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
