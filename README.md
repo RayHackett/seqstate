@@ -20,7 +20,6 @@ starting...
 # Repo TODOs
 - check over docstrings
 - Actually write a README.md
-- generate docs with sphinx
 - add github workflows for tests
 - publish to pypi
 
