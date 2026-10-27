@@ -2,37 +2,37 @@
 ..    :target: https://aur.archlinux.org/packages/python-pyjess
 ..    :class: dark-light
 
-.. |Source| image:: https://img.shields.io/badge/source-GitHub-303030.svg?maxAge=3600&style=flat
-   :target: https://github.com/rayhackett/enzymm/
-   :class: dark-light
+.. .. |Source| image:: https://img.shields.io/badge/source-GitHub-303030.svg?maxAge=3600&style=flat
+..    :target: https://github.com/rayhackett/enzymm/
+..    :class: dark-light
 
-.. |Actions| image:: https://img.shields.io/github/actions/workflow/status/RayHackett/enzymm/test.yml?branch=main&style=flat&maxAge=300
-   :target: https://github.com/RayHackett/Enzymm/actions/workflows/test.yml
-   :class: dark-light
+.. .. |Actions| image:: https://img.shields.io/github/actions/workflow/status/RayHackett/enzymm/test.yml?branch=main&style=flat&maxAge=300
+..    :target: https://github.com/RayHackett/Enzymm/actions/workflows/test.yml
+..    :class: dark-light
 
-.. |Coverage| image:: https://img.shields.io/codecov/c/gh/rayhackett/enzymm?logo=codecov&style=flat&maxAge=3600
-   :target: https://codecov.io/gh/rayhackett/enzymm/
-   :class: dark-light
+.. .. |Coverage| image:: https://img.shields.io/codecov/c/gh/rayhackett/enzymm?logo=codecov&style=flat&maxAge=3600
+..    :target: https://codecov.io/gh/rayhackett/enzymm/
+..    :class: dark-light
 
-.. |PyPI| image:: https://img.shields.io/pypi/v/enzymm.svg?style=flat&maxAge=3600
-   :target: https://pypi.python.org/pypi/enzymm
-   :class: dark-light
+.. .. |PyPI| image:: https://img.shields.io/pypi/v/enzymm.svg?style=flat&maxAge=3600
+..    :target: https://pypi.python.org/pypi/enzymm
+..    :class: dark-light
 
-.. |Bioconda| image:: https://img.shields.io/conda/vn/bioconda/enzymm?style=flat&maxAge=3600
-   :target: https://anaconda.org/bioconda/enzymm
-   :class: dark-light
+.. .. |Bioconda| image:: https://img.shields.io/conda/vn/bioconda/enzymm?style=flat&maxAge=3600
+..    :target: https://anaconda.org/bioconda/enzymm
+..    :class: dark-light
 
-.. |Wheel| image:: https://img.shields.io/pypi/wheel/enzymm?style=flat&maxAge=3600
-   :target: https://pypi.org/project/enzymm/#files
-   :class: dark-light
+.. .. |Wheel| image:: https://img.shields.io/pypi/wheel/enzymm?style=flat&maxAge=3600
+..    :target: https://pypi.org/project/enzymm/#files
+..    :class: dark-light
 
-.. |Versions| image:: https://img.shields.io/pypi/pyversions/enzymm.svg?style=flat&maxAge=3600
-   :target: https://pypi.org/project/enzymm/#files
-   :class: dark-light
+.. .. |Versions| image:: https://img.shields.io/pypi/pyversions/enzymm.svg?style=flat&maxAge=3600
+..    :target: https://pypi.org/project/enzymm/#files
+..    :class: dark-light
 
-.. |versions| image:: https://img.shields.io/github/v/tag/rayhackett/enzymm?label=version&sort=semver
-   :target: https://github.com/rayhackett/enzymm/tags
-   :class: dark-light
+.. .. |versions| image:: https://img.shields.io/github/v/tag/rayhackett/enzymm?label=version&sort=semver
+..    :target: https://github.com/rayhackett/enzymm/tags
+..    :class: dark-light
 
 Seqstate - Stateful genomic sequence handling |Stars|
 =====================================================
@@ -53,20 +53,20 @@ Seqstate - Stateful genomic sequence handling |Stars|
    :target: https://choosealicense.com/licenses/mit/
    :class: dark-light
 
-.. |Issues| image:: https://img.shields.io/github/issues/rayhackett/enzymm.svg?style=flat&maxAge=600
-   :target: https://github.com/rayhackett/enzymm/issues
+.. |Issues| image:: https://img.shields.io/github/issues/rayhackett/seqstate.svg?style=flat&maxAge=600
+   :target: https://github.com/rayhackett/seqstate/issues
    :class: dark-light
 
-.. |Docs| image:: https://img.shields.io/readthedocs/enzymm?style=flat&maxAge=3600
-   :target: http://enzymm.readthedocs.io/en/stable/?badge=stable
+.. |Docs| image:: https://img.shields.io/readthedocs/seqstate?style=flat&maxAge=3600
+   :target: http://seqstate.readthedocs.io/en/latest/?badge=stable
    :class: dark-light
 
 .. |Changelog| image:: https://img.shields.io/badge/keep%20a-changelog-green.svg?maxAge=3600&style=flat
-   :target: https://github.com/rayhackett/enzymm/blob/main/CHANGELOG.md
+   :target: https://github.com/rayhackett/seqstate/blob/main/CHANGELOG.md
    :class: dark-light
 
-.. |Downloads| image:: https://static.pepy.tech/personalized-badge/enzymm?period=total&units=INTERNATIONAL_SYSTEM&left_color=grey&right_color=GREEN&left_text=downloads
-   :target: https://pepy.tech/projects/enzymm
+.. |Downloads| image:: https://static.pepy.tech/personalized-badge/seqstate?period=total&units=INTERNATIONAL_SYSTEM&left_color=grey&right_color=GREEN&left_text=downloads
+   :target: https://pepy.tech/projects/seqstate
    :class: dark-light
 
 Overview
@@ -78,7 +78,7 @@ Overview
 
 **seqstate** is available for all modern Python versions (3.10+).
 
-Run ``pip install enzymm`` in a shell to download the latest release from PyPI,
+.. Run ``pip install seqstate`` in a shell to download the latest release from PyPI,
 or have a look at the :doc:`Installation page <guide/install>` to find other ways 
 to install **seqstate**.
 

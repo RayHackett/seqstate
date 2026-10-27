@@ -19,7 +19,7 @@ Code is formated with [Black](https://github.com/psf/black)
 ## Setting up a local repository
 
 ```console
-$ git clone --recursive https://github.com/rayhackett/enzymm
+$ git clone --recursive https://github.com/rayhackett/seqstate
 ```
 
 ## Running tests
