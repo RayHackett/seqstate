@@ -5,11 +5,6 @@ build-backend = "hatchling.build"
 [project]
 name = "seqstate"
 dynamic = ["version"]
-
-# Read the project version from seqstate/_version.py.
-[tool.hatch.version]
-path = "src/seqstate/_version.py"
-
 dependencies = [
     "gb_io~=0.4",
     "polars~=2",
@@ -34,6 +29,10 @@ classifiers = [
   "Development Status :: 4 - Beta",
   "Programming Language :: Python"
 ]
+
+# Read the project version from seqstate/_version.py.
+[tool.hatch.version]
+path = "src/seqstate/_version.py"
 
 [project.optional-dependencies]
 compress = [
