@@ -56,7 +56,7 @@ def build_parser() -> argparse.ArgumentParser:
         add_help=False,
     )
 
-    commands = parser.add_subparsers(required=True, metavar="COMMAND")
+    commands = parser.add_subparsers(title="commands", required=True, metavar="COMMAND")
     call_genes.configure_parser(
         commands.add_parser(
             "call-genes",
