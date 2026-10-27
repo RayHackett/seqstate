@@ -3,13 +3,9 @@
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
-import os
-import sys
+from importlib.metadata import version
 
-sys.path.insert(
-    0, os.path.realpath(os.path.join(__file__, os.path.pardir, os.path.pardir, "src"))
-)
-from seqstate import __version__
+__version__ = version("seqstate")
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
