@@ -4,7 +4,12 @@ build-backend = "hatchling.build"
 
 [project]
 name = "seqstate"
-version = "0.0.1"
+dynamic = ["version"]
+
+# Read the project version from seqstate/_version.py.
+[tool.hatch.version]
+path = "src/seqstate/_version.py"
+
 dependencies = [
     "gb_io~=0.4",
     "polars~=2",

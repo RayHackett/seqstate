@@ -3,9 +3,16 @@
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
-from importlib.metadata import version
 
-__version__ = version("seqstate")
+# ----------------------- read _version.py --------------------------------------
+import ast
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+version_file = next(Path(sys.path[0]).rglob("_version.py"))
+tree = ast.parse(version_file.read_text(encoding="utf-8"))
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
@@ -13,7 +20,7 @@ __version__ = version("seqstate")
 project = "seqstate"
 copyright = "2026, Raymund Hackett"
 author = "Raymund Hackett"
-release = __version__
+release = ast.literal_eval(tree.body[0].value)
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

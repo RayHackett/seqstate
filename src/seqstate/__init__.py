@@ -3,14 +3,14 @@ from __future__ import annotations
 import copy
 import enum
 from dataclasses import dataclass, field
-from importlib.metadata import version
 from typing import Any
 
 import gb_io
 import pyhmmer
 import pyrodigal
 
-__version__ = version("seqstate")
+from ._version import __version__
+
 __author__ = "Raymund Hackett <r.e.hackett@uni-konstanz.de>"
 __license__ = "MIT"
 
