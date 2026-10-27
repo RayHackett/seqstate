@@ -3,9 +3,26 @@ from __future__ import annotations
 import contextlib
 import io
 import os
+import sys
 from contextlib import ExitStack
 from pathlib import Path
 from typing import BinaryIO, ContextManager, TextIO, overload
+
+from numba.cuda.cudadrv.runtime import Runtime
+
+if sys.version_info >= (3, 14):
+    from compression import zstd
+else:
+    # backports to previous python versions https://github.com/Rogdham/backports.zstd
+    try:
+        from backports import zstd  # ty:ignore[unresolved-import]
+    except ImportError as err:
+        zstd = err  # ty:ignore[invalid-assignment]
+        try:
+            import zstandard  # ty:ignore[unresolved-import]
+        except ImportError as err:
+            zstandard = err  # ty:ignore[invalid-assignment]
+
 
 _BZ2_MAGIC = b"BZh"
 _GZIP_MAGIC = b"\x1f\x8b"
@@ -115,12 +132,15 @@ def zopen(path, mode="r", encoding=None, errors=None, newline=None):
             raw = ctx.enter_context(lz4.frame.open(raw))
 
         elif peek.startswith(_ZSTD_MAGIC):
-            try:
-                import zstandard
-            except ImportError as err:
-                raise RuntimeError("ZSTD file but zstandard not installed") from err
-            dctx = zstandard.ZstdDecompressor()
-            raw = ctx.enter_context(dctx.stream_reader(raw))
+            if sys.version_info >= (3, 14) or not isinstance(zstd, ImportError):
+                raw = ctx.enter_context(zstd.open(raw, "rb"))
+            elif not isinstance(zstandard, ImportError):
+                dctx = zstandard.ZstdDecompressor()
+                raw = ctx.enter_context(dctx.stream_reader(raw))
+            else:
+                raise ImportError(
+                    "Either 'backports.zstd' or 'zstandard' or python 3.14 required!"
+                )
 
         # text mode
         if mode == "r":
