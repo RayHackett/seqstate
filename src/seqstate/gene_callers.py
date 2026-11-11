@@ -101,7 +101,7 @@ class CDSFinder:
                 elif isinstance(f.location, gb_io.Complement) and isinstance(
                     f.location.location, gb_io.Join
                 ):
-                    strands = [loc.strand for loc in f.location.locations]
+                    strands = [loc.strand for loc in f.location.location.locations]
                     if strands.count(strands[0]) == len(strands):
                         strand = Strand.from_sign("-")
                     else:
