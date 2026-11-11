@@ -78,9 +78,9 @@ class Domain:
         assert self.end >= 0
         assert self.start < self.end
         assert isinstance(self.i_evalue, float)
-        assert self.i_evalue > 0
+        assert self.i_evalue >= 0  # I think 0 is possible due to underflow
         assert isinstance(self.pvalue, float)
-        assert self.pvalue > 0
+        assert self.pvalue >= 0
         if self.score is not None:
             assert isinstance(self.score, float)
             self.score > 0
