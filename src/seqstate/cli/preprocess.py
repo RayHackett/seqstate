@@ -71,14 +71,6 @@ def configure_preprocessing(
         help="The stem to give to the output file(s)",
     )
     group.add_argument(
-        "-f",
-        "--format",
-        choices=("fasta", "genbank", "faa+gff"),
-        required=False,
-        default=None,
-        help="The file format of the input. Optional. Will detect fasta, genbank and embl files.",
-    )
-    group.add_argument(
         "--min-record-length",
         type=int,
         required=False,
@@ -228,7 +220,6 @@ def run(args: argparse.Namespace, console: Console) -> int:
     gene_collection = (
         SequencePathCollection(
             args.input,
-            format=args.format,
             console=console,
         )
         .load_files(
