@@ -220,6 +220,7 @@ class FeatureTable:
             "pvalue": polars.Float64,
             "domain_start": polars.UInt32,
             "domain_end": polars.UInt32,
+            "score": polars.Float64,
         }
     )
 
@@ -237,6 +238,7 @@ class FeatureTable:
                 "pvalue",
                 "domain_start",
                 "domain_end",
+                "score",
             ]
         ).sort(["sequence_id", "start", "end", "domain_start", "domain_end", "pvalue"])
         self._validate()

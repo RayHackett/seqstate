@@ -793,7 +793,7 @@ class AnnotatedProteinCollection(Sequence[Protein]):
             "pvalue": polars.Float64,
             "domain_start": polars.UInt32,
             "domain_end": polars.UInt32,
-            "score": polars.Float32,
+            "score": polars.Float64,
         }
 
         return polars.from_dict(
@@ -974,48 +974,6 @@ class AnnotatedGeneCollection(Sequence[Gene]):
             console=self.console,
         )
 
-    def create_score_tbl(self) -> polars.DataFrame:
-        tbl_data = collections.defaultdict(list)
-        for gene in self.genes:
-            for domain in gene.protein.domains:
-                tbl_data["sequence_id"].append(gene.source.accession)
-                tbl_data["protein_id"].append(gene.protein.id)
-                tbl_data["start"].append(gene.start)
-                tbl_data["end"].append(gene.end)
-                tbl_data["strand"].append(gene.strand.sign)
-                tbl_data["domain"].append(domain.name)
-                tbl_data["hmm"].append(domain.hmm)
-                tbl_data["i_evalue"].append(domain.i_evalue)
-                tbl_data["pvalue"].append(domain.pvalue)
-                tbl_data["domain_start"].append(domain.start)
-                tbl_data["domain_end"].append(domain.end)
-                tbl_data["score"].append(domain.score)
-
-        if not tbl_data:
-            raise ValueError("Failed to get any score table data!")
-
-        schema = {
-            "sequence_id": polars.Categorical("sequence_id"),
-            "protein_id": polars.Utf8,
-            "start": polars.UInt32,
-            "end": polars.UInt32,
-            "strand": polars.Enum(["+", "-"]),
-            "domain": polars.Categorical("domain"),
-            "hmm": polars.Categorical("hmm"),
-            "i_evalue": polars.Float64,
-            "pvalue": polars.Float64,
-            "domain_start": polars.UInt32,
-            "domain_end": polars.UInt32,
-            "score": polars.Float32,
-        }
-
-        return polars.from_dict(
-            data=tbl_data,
-            schema_overrides=schema,
-        ).sort(
-            by=["sequence_id", "start", "end", "domain_start", "domain_end", "pvalue"]
-        )
-
     def create_gene_table(self) -> GeneTable:
         return GeneCollection(self.genes).create_gene_table()
 
@@ -1034,6 +992,7 @@ class AnnotatedGeneCollection(Sequence[Gene]):
                 tbl_data["pvalue"].append(domain.pvalue)
                 tbl_data["domain_start"].append(domain.start)
                 tbl_data["domain_end"].append(domain.end)
+                tbl_data["score"].append(domain.score)
 
         if not tbl_data:
             raise ValueError("Failed to get any Feature table data!")
@@ -1050,6 +1009,7 @@ class AnnotatedGeneCollection(Sequence[Gene]):
             "pvalue": polars.Float64,
             "domain_start": polars.UInt32,
             "domain_end": polars.UInt32,
+            "score": polars.Float64,
         }
 
         return FeatureTable(
@@ -1162,7 +1122,7 @@ class PyHMMER:
         )
         for i, obj in enumerate(seqs_idx):
             if isinstance(obj, Gene):
-                raise ValueError("karjarp")
+                raise ValueError("Got a gene not a protein!")
                 seq = obj.protein.seq
             else:
                 seq = obj.seq
