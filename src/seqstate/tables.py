@@ -34,7 +34,7 @@ class GeneTable:
                 "end",
                 "strand",
             ]
-        )
+        ).sort(["sequence_id", "start", "end"])
         self._validate()
 
     def _validate(self):
@@ -133,9 +133,9 @@ class LabeledGeneTable:
                 ]
             )
             # Cast inner to a string!
-            .with_columns(
-                polars.col(label_column).cast(polars.Categorical("label"))
-            ).rename({label_column: "label"})
+            .with_columns(polars.col(label_column).cast(polars.Categorical("label")))
+            .rename({label_column: "label"})
+            .sort(["sequence_id", "start", "end"])
         )
         self._validate()
 
@@ -238,7 +238,7 @@ class FeatureTable:
                 "domain_start",
                 "domain_end",
             ]
-        )
+        ).sort(["sequence_id", "start", "end", "domain_start", "domain_end", "pvalue"])
         self._validate()
 
     def _validate(self):

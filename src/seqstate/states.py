@@ -799,7 +799,7 @@ class AnnotatedProteinCollection(Sequence[Protein]):
         return polars.from_dict(
             data=tbl_data,
             schema_overrides=schema,
-        ).sort(by=["sequence_id", "start", "end", "domain_start", "domain_end"])
+        ).sort(by=["start", "end", "domain_start", "domain_end", "pvalue"])
 
 
 class GeneCollection(Iterable[Gene]):
@@ -1012,7 +1012,9 @@ class AnnotatedGeneCollection(Sequence[Gene]):
         return polars.from_dict(
             data=tbl_data,
             schema_overrides=schema,
-        ).sort(by=["sequence_id", "start", "end", "domain_start", "domain_end"])
+        ).sort(
+            by=["sequence_id", "start", "end", "domain_start", "domain_end", "pvalue"]
+        )
 
     def create_gene_table(self) -> GeneTable:
         return GeneCollection(self.genes).create_gene_table()
@@ -1055,7 +1057,16 @@ class AnnotatedGeneCollection(Sequence[Gene]):
                 data=tbl_data,
                 schema_overrides=schema,
             )
-            .sort(by=["sequence_id", "start", "end", "domain_start", "domain_end"])
+            .sort(
+                by=[
+                    "sequence_id",
+                    "start",
+                    "end",
+                    "domain_start",
+                    "domain_end",
+                    "pvalue",
+                ]
+            )
             .lazy()
         )
 

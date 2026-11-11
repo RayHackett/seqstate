@@ -53,8 +53,8 @@ class Featureizer(Generic[T]):
         # if B is now less significant than either A or C this will remove the overlap
         # The previous pop implementation would keep A and C (if the order is right)
 
-        self.features = (
-            self.features.sort(["protein_id", start_column, threshold_column])
+        self.features = (  # ty:ignore[invalid-assignment]
+            self.features
             # Track the furthest domain end seen so far among previous rows per protein.
             # If current domain start > cumulative max end of all prior rows per protein,
             # there's no overlap with anything before it.
@@ -65,7 +65,7 @@ class Featureizer(Generic[T]):
                 .cum_max()
                 .over("protein_id")  # per protein
                 .alias("_max_end_so_far")
-            )
+            )  # ty:ignore[invalid-argument-type]
             # A new _group starts when current start > max end so far. These overlap
             .with_columns(
                 (polars.col(start_column) > polars.col("_max_end_so_far"))
@@ -80,7 +80,7 @@ class Featureizer(Generic[T]):
                 == polars.col(threshold_column).min().over(["protein_id", "_group"])
             )
             .drop(["_max_end_so_far", "_group"])
-            .sort(["sequence_id", start_column])
+            .sort(["protein_id", start_column, end_column])
         )
 
         return self
@@ -164,6 +164,9 @@ class Featureizer(Generic[T]):
 
         if "protein_id" not in genes.collect_schema().names():
             raise ValueError("Gene Table missing 'protein_id' column for Gene names")
+
+        if "sequence_id" not in genes.collect_schema().names():
+            raise ValueError("Gene Table missing 'sequence_id' column for Gene names")
 
         if isinstance(genes, polars.DataFrame) and isinstance(
             self.features, polars.DataFrame
