@@ -509,7 +509,7 @@ class test_GeneCollection(unittest.TestCase):
             cds_feature="CDS",
             streaming=True,
         )
-        self.assertEqual(list(gene_collection.genes), list(new.genes))
+        self.assertEqual(list(gene_collection), list(new))
 
     def test_roundtrip_via_io_faa(self):
         gene_collection = (
@@ -539,7 +539,7 @@ class test_GeneCollection(unittest.TestCase):
             .load_files(streaming=True)
             .extract_genes(call_genes=False, streaming=True)
         )
-        self.assertEqual(list(gene_collection.genes), list(new.genes))
+        self.assertEqual(list(gene_collection), list(new))
 
         # roundtrip via dump
         outdir = output = Path(self.tempdir.name)
@@ -559,7 +559,7 @@ class test_GeneCollection(unittest.TestCase):
                 streaming=True,
             )
         )
-        self.assertEqual(list(gene_collection.genes), list(new.genes))
+        self.assertEqual(list(gene_collection), list(new))
 
     def test_roundtrip_via_io_gff(self):
         gene_collection = (
@@ -591,7 +591,7 @@ class test_GeneCollection(unittest.TestCase):
                 streaming=True,
             )
         )
-        self.assertEqual(list(gene_collection.genes), list(new.genes))
+        self.assertEqual(list(gene_collection), list(new))
 
 
 class test_AnnotatedGeneCollection(unittest.TestCase):

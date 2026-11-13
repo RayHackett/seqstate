@@ -553,6 +553,30 @@ class SequenceCollectionBase(Iterable[gb_io.Record]):
                 f"Split the sequences into {i+1} batches of size {batch_size}"
             )
 
+    @overload
+    def extract_genes(
+        self,
+        min_gene_number: int = 0,
+        cds_feature: str = "CDS",
+        locus_tag: str = "locus_tag",
+        jobs: int = 0,
+        call_genes: bool = False,
+        streaming=False,
+        callback_file: TextIO | None = None,
+    ) -> GeneCollection: ...
+
+    @overload
+    def extract_genes(
+        self,
+        min_gene_number: int = 0,
+        cds_feature: str = "CDS",
+        locus_tag: str = "locus_tag",
+        jobs: int = 0,
+        call_genes: bool = False,
+        streaming=True,
+        callback_file: TextIO | None = None,
+    ) -> LazyGeneCollection: ...
+
     def extract_genes(
         self,
         min_gene_number: int = 0,
@@ -562,7 +586,7 @@ class SequenceCollectionBase(Iterable[gb_io.Record]):
         call_genes: bool = False,
         streaming: bool = True,
         callback_file: TextIO | None = None,
-    ) -> GeneCollection:
+    ) -> GeneCollectionBase:
 
         self.console.print("Extracting genes from input sequences")
 
@@ -615,6 +639,8 @@ class SequenceCollectionBase(Iterable[gb_io.Record]):
             # only annotate those sequences lacking features with pyrodigal;
             # parse the rest with the CDS finder
             if not call_genes:
+                # TODO here we are collecting seqs. this probably should change somehow
+                # make it lazy
                 seq_dict = collections.defaultdict(list)
 
                 for seq in self:
@@ -658,12 +684,13 @@ class SequenceCollectionBase(Iterable[gb_io.Record]):
                     progress=callback_to_file if callback_file else callback,
                 )
 
-            if not streaming:
-                genes = list(genes)
+            if streaming:
+                return LazyGeneCollection(genes=genes, jobs=jobs, console=self.console)
+            else:
+                genes = tuple(genes)
                 # collect genes because we will materialize them anyway later
                 self.console.print(f"Found a total of {len(genes)} genes!")
-
-            return GeneCollection(genes=genes, jobs=jobs, console=self.console)
+                return GeneCollection(genes=genes, jobs=jobs, console=self.console)
 
 
 class LazySequenceCollection(SequenceCollectionBase):
@@ -734,7 +761,7 @@ class SequenceCollection(SequenceCollectionBase, Sequence[gb_io.Record]):
             return new
         return self._sequences[index]
 
-    def materialize(self) -> SequenceCollection:
+    def collect(self) -> SequenceCollection:
         """Already in memory. Returns self"""
         return self
 
@@ -856,7 +883,7 @@ class ProteinCollection(ProteinCollectionBase, Sequence[Protein]):
             return new
         return self._proteins[index]
 
-    def materialize(self) -> ProteinCollection:
+    def collect(self) -> ProteinCollection:
         """Already in memory, so this returns itself."""
         return self
 
@@ -1002,106 +1029,24 @@ class AnnotatedProteinCollection(Sequence[Protein]):
         ).sort(by=["start", "end", "domain_start", "domain_end", "pvalue"])
 
 
-class GeneCollection(Iterable[Gene]):
-    """A collection of Gene objects"""
+class GeneCollectionBase(Iterable[Gene]):
+    """
+    A base class for collections of Gene objects
+
+    Child classes should implement iteration over self of Gene objects
+    """
 
     def __init__(
         self,
-        genes: Iterable[Gene],
         jobs: int = 0,
         console: Console | None = None,
     ):
-        self.genes = genes
         self.console = console if console is not None else Console()
         self.jobs = jobs
 
-    def __len__(self) -> int:
-        if isinstance(self.genes, Sized):
-            return len(self.genes)
-        else:
-            return 0
-
-    def __iter__(self) -> Iterator[Gene]:
-        return iter(self.genes)
-
-    def to_featured_sequence_collection(
-        self, is_ordered: bool = True
-    ) -> SequenceCollection:
-        """Use this to include the called genes in the SequeneCollection"""
-
-        # static method to stream featured sequence records from source grouped genes
-        def _featurize_records(genes) -> Iterator[gb_io.Record]:
-            seen_sequences = set()
-            # streaming groupby
-            for source, source_genes in groupby(genes, key=lambda gene: gene.source):
-                assert source not in seen_sequences, "Genes are not grouped by sequence"
-                # clear the existing CDS features because we are going to re-add them
-                source.features = [i for i in source.features if i.kind != "CDS"]
-                seen_sequences.add(source)
-                # sort the source genes
-                source_genes = sorted(source_genes, key=lambda gene: gene.start)
-                # copy the source; happens once per sequence
-                source = source.copy()
-                for gene in source_genes:
-                    source.features.append(gene.to_feature())
-
-                yield source
-
-        # Streaming option which only works if the genes are already grouped by sequence
-        if is_ordered:
-            sequences = _featurize_records(self.genes)
-
-        else:
-            # Option 2: if the genes are not in order:
-            # e.g. if [gene from sequence A, gene from sequence B, gene form sequence A]
-            sources = collections.defaultdict(
-                copy.deepcopy
-            )  # ty:ignore[no-matching-overload]
-            for gene in self.genes:
-                source_copy = sources[gene.source]
-                source_copy.features.append(gene.to_feature())
-
-            for seq in sources.values():
-                seq.features.sort(key=lambda feature: feature.location.start)
-
-            sequences = sources.values()
-
-        return SequenceCollection(
-            sequences=sequences,
-            console=self.console,
-        )
-
-    def annotate_domains(
-        self,
-        hmms: list[HMMSet],
-        whitelist: Collection[str] | None = None,
-        bit_cutoffs: str | None = None,
-        pvalue_filter: float | None = None,
-        evalue_filter: float | None = None,
-    ) -> AnnotatedGeneCollection:
-
-        genes = list(self.genes)
-
-        ann_proteins = ProteinCollection(
-            console=self.console,
-            jobs=self.jobs,
-            proteins=(gene.protein for gene in genes),
-        ).annotate_domains(
-            hmms=hmms,
-            whitelist=whitelist,
-            bit_cutoffs=bit_cutoffs,
-            pvalue_filter=pvalue_filter,
-            evalue_filter=evalue_filter,
-        )
-
-        for i, (protein, gene) in enumerate(zip(ann_proteins, genes, strict=True)):
-            genes[i] = gene.with_protein_domains(protein.domains)
-
-        return AnnotatedGeneCollection(genes=genes, console=self.console)
-
     def create_gene_table(self) -> GeneTable:
         tbl_data = collections.defaultdict(list)
-        for gene in self.genes:
+        for gene in self:
             tbl_data["sequence_id"].append(gene.source.accession)
             tbl_data["protein_id"].append(gene.protein.id)
             tbl_data["start"].append(gene.start)
@@ -1134,7 +1079,7 @@ class GeneCollection(Iterable[Gene]):
 
         with open(faa_path, "w") as faa_f, open(gff_path, "w") as gff_f:
             gff_f.write("##gff-version 3\n")
-            for gene in self.genes:
+            for gene in self:
                 faa_str, gff_str = gene.to_faa_and_gff()
                 faa_f.write(faa_str)
                 if not faa_str.endswith("\n"):
@@ -1142,6 +1087,179 @@ class GeneCollection(Iterable[Gene]):
                 gff_f.write(gff_str)
                 if not gff_str.endswith("\n"):
                     gff_f.write("\n")
+
+    @overload
+    def to_featured_sequence_collection(
+        self,
+        is_ordered=True,
+    ) -> LazySequenceCollection: ...
+
+    @overload
+    def to_featured_sequence_collection(
+        self,
+        is_ordered=False,
+    ) -> SequenceCollection: ...
+
+    def to_featured_sequence_collection(
+        self,
+        is_ordered: bool = True,
+    ) -> SequenceCollectionBase:
+        """Use this to include the called genes in the SequeneCollection"""
+
+        # static method to stream featured sequence records from source grouped genes
+        def _featurize_records(genes) -> Iterator[gb_io.Record]:
+            seen_sequences = set()
+            # streaming groupby
+            for source, source_genes in groupby(genes, key=lambda gene: gene.source):
+                assert source not in seen_sequences, "Genes are not grouped by sequence"
+                # clear the existing CDS features because we are going to re-add them
+                source.features = [i for i in source.features if i.kind != "CDS"]
+                seen_sequences.add(source)
+                # sort the source genes
+                source_genes = sorted(source_genes, key=lambda gene: gene.start)
+                # copy the source; happens once per sequence
+                source = source.copy()
+                for gene in source_genes:
+                    source.features.append(gene.to_feature())
+
+                yield source
+
+        # Streaming option which only works if the genes are already grouped by sequence
+        if is_ordered:
+            return LazySequenceCollection(
+                sequences=_featurize_records(self),
+                console=self.console,
+            )
+
+        else:
+            # Option 2: if the genes are not in order:
+            # e.g. if [gene from sequence A, gene from sequence B, gene form sequence A]
+            sources = collections.defaultdict(
+                copy.deepcopy
+            )  # ty:ignore[no-matching-overload]
+            for gene in self:
+                source_copy = sources[gene.source]
+                source_copy.features.append(gene.to_feature())
+
+            for seq in sources.values():
+                seq.features.sort(key=lambda feature: feature.location.start)
+
+            return SequenceCollection(
+                sequences=tuple(sources.values()),
+                console=self.console,
+            )
+
+
+class LazyGeneCollection(GeneCollectionBase):
+    """
+    Single-pass stream of Gene objects.
+
+    Note:
+        Iterating a second time raises an Error
+    """
+
+    def __init__(
+        self,
+        genes: Iterable[Gene],
+        jobs: int = 0,
+        console: Console | None = None,
+    ) -> None:
+        super().__init__(jobs=jobs, console=console)
+        self._source: Iterator[Gene] = iter(genes)
+        self._consumed: bool = False
+
+    def __iter__(self) -> Iterator[Gene]:
+        if self._consumed:
+            raise RuntimeError(
+                "This collection is a single-pass stream and has already been "
+                "consumed. Call .collect() first if you need to iterate it "
+                "more than once."
+            )
+        self._consumed = True
+        return self._source
+
+    def collect(self) -> GeneCollection:
+        """Consume the stream into memory. Uses up this collection."""
+        return GeneCollection(self, jobs=self.jobs, console=self.console)
+
+    def annotate_domains(
+        self,
+        hmms: list[HMMSet],
+        whitelist: Collection[str] | None = None,
+        bit_cutoffs: str | None = None,
+        pvalue_filter: float | None = None,
+        evalue_filter: float | None = None,
+    ) -> AnnotatedGeneCollection:
+        return self.collect().annotate_domains(
+            hmms=hmms,
+            whitelist=whitelist,
+            bit_cutoffs=bit_cutoffs,
+            pvalue_filter=pvalue_filter,
+            evalue_filter=evalue_filter,
+        )
+
+
+class GeneCollection(GeneCollectionBase, Iterable[Gene]):
+    """An immutable, in-memory collection of Gene objects"""
+
+    def __init__(
+        self,
+        genes: Iterable[Gene],
+        jobs: int = 0,
+        console: Console | None = None,
+    ) -> None:
+        super().__init__(jobs=jobs, console=console)
+        self._genes: tuple[Gene, ...] = tuple(genes)
+
+    def __len__(self) -> int:
+        return len(self._genes)
+
+    def __iter__(self) -> Iterator[Gene]:
+        return iter(self._genes)
+
+    @overload
+    def __getitem__(self, index: int) -> Gene: ...
+
+    @overload
+    def __getitem__(self, index: slice) -> GeneCollection: ...
+
+    def __getitem__(self, index: int | slice) -> Gene | GeneCollection:
+        if isinstance(index, slice):
+            new = copy.copy(self)  # keeps console and jobs
+            new._genes = self._genes[index]
+            return new
+        return self._genes[index]
+
+    def collect(self) -> GeneCollection:
+        """Already in memory, so this returns itself."""
+        return self
+
+    def annotate_domains(
+        self,
+        hmms: list[HMMSet],
+        whitelist: Collection[str] | None = None,
+        bit_cutoffs: str | None = None,
+        pvalue_filter: float | None = None,
+        evalue_filter: float | None = None,
+    ) -> AnnotatedGeneCollection:
+
+        genes = list(self)
+        ann_proteins = ProteinCollection(
+            console=self.console,
+            jobs=self.jobs,
+            proteins=(gene.protein for gene in genes),
+        ).annotate_domains(
+            hmms=hmms,
+            whitelist=whitelist,
+            bit_cutoffs=bit_cutoffs,
+            pvalue_filter=pvalue_filter,
+            evalue_filter=evalue_filter,
+        )
+
+        for i, (protein, gene) in enumerate(zip(ann_proteins, genes, strict=True)):
+            genes[i] = gene.with_protein_domains(protein.domains)
+
+        return AnnotatedGeneCollection(genes=genes, console=self.console)
 
 
 class AnnotatedGeneCollection(Sequence[Gene]):
