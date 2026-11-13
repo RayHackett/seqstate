@@ -965,7 +965,7 @@ class AnnotatedProteinCollection(Sequence[Protein]):
     def disentangle_domains(self) -> AnnotatedProteinCollection:
         self.console.print("Disentangling overlapping domains in each gene")
         return AnnotatedProteinCollection(
-            proteins=tuple(protein.disentangle() for protein in self._proteins),
+            proteins=(protein.disentangle() for protein in self._proteins),
             console=self.console,
         )
 
@@ -1145,41 +1145,48 @@ class GeneCollection(Iterable[Gene]):
 
 
 class AnnotatedGeneCollection(Sequence[Gene]):
-    """A collection Gene items annotated with domain information"""
+    """An immutable collection Gene items annotated with domain information"""
 
     def __init__(
         self,
-        genes: list[Gene],
+        genes: Iterable[Gene],
         console: Console | None = None,
     ):
-        self.genes = list(genes)
+        self._genes = tuple(genes)
         self.console = console if console is not None else Console()
 
     def __len__(self) -> int:
-        return len(self.genes)
+        return len(self._genes)
+
+    def __iter__(self) -> Iterator[Gene]:
+        return iter(self._genes)
 
     @overload
-    def __getitem__(self, idx: int) -> Gene: ...
+    def __getitem__(self, index: int) -> Gene: ...
 
     @overload
-    def __getitem__(self, idx: slice) -> list[Gene]: ...
+    def __getitem__(self, index: slice) -> AnnotatedGeneCollection: ...
 
-    def __getitem__(self, idx: int | slice):  # ty:ignore[invalid-method-override]
-        return self.genes[idx]
+    def __getitem__(self, index: int | slice) -> Gene | AnnotatedGeneCollection:
+        if isinstance(index, slice):
+            new = copy.copy(self)  # keeps the console
+            new._genes = self._genes[index]
+            return new
+        return self._genes[index]
 
     def disentangle_domains(self) -> AnnotatedGeneCollection:
         self.console.print("Disentangling overlapping domains in each gene")
         return AnnotatedGeneCollection(
-            genes=[gene.disentangle() for gene in self.genes],
+            genes=(gene.disentangle() for gene in self._genes),
             console=self.console,
         )
 
     def create_gene_table(self) -> GeneTable:
-        return GeneCollection(self.genes).create_gene_table()
+        return GeneCollection(self._genes).create_gene_table()
 
     def create_feature_table(self) -> FeatureTable:
         tbl_data = collections.defaultdict(list)
-        for gene in self.genes:
+        for gene in self._genes:
             for domain in gene.protein.domains:
                 tbl_data["sequence_id"].append(gene.source.accession)
                 tbl_data["protein_id"].append(gene.protein.id)
