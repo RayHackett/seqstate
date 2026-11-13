@@ -16,8 +16,8 @@ from rich.console import Console
 from seqstate import Domain, Gene, Protein, Strand
 from seqstate.hmm_collection import HMMSet
 from seqstate.states import (AnnotatedProteinCollection, GeneCollection,
-                             ProteinCollection, SequenceCollection,
-                             SequencePathCollection)
+                             LazyProteinCollection, ProteinCollection,
+                             SequenceCollection, SequencePathCollection)
 from seqstate.tables import FeatureTable, GeneTable
 from seqstate.vocab import Labels, Vocab
 from tests import test_data
@@ -332,9 +332,17 @@ class test_ProteinCollection(unittest.TestCase):
         col = SequencePathCollection(
             paths=[self.paths4[0]],  # ty:ignore[invalid-argument-type]
             console=Console(file=io.StringIO()),
-        ).load_files(streaming=True)
+        ).load_files(streaming=False)
 
         self.assertIsInstance(col, ProteinCollection)
+
+    def test_only_faa_lazy(self):
+        col = SequencePathCollection(
+            paths=[self.paths4[0]],  # ty:ignore[invalid-argument-type]
+            console=Console(file=io.StringIO()),
+        ).load_files(streaming=True)
+
+        self.assertIsInstance(col, LazyProteinCollection)
 
     def test_annotation(self):
         hmm = HMMSet(
@@ -386,7 +394,9 @@ class test_SequenceCollection(unittest.TestCase):
             sequences=[self.record, self.record2],
             console=self.console,
         )
-        self.assertEqual(col1.sequences, [self.record, self.record2])
+        self.assertEqual(col1._sequences, (self.record, self.record2))
+        # dont have an __eq___ dunder yet
+        # self.assertEqual(col1, SequenceCollection([self.record, self.record2]))
         self.assertEqual(col1.console, self.console)
 
     def test_iter(self):

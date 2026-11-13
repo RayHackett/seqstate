@@ -356,11 +356,25 @@ class SequencePathCollection(Sequence[Path]):
 
         return gff_df
 
+    @overload
+    def load_files(
+        self,
+        min_record_length: int = 0,
+        streaming=False,
+    ) -> SequenceCollection | ProteinCollection: ...
+
+    @overload
+    def load_files(
+        self,
+        min_record_length: int = 0,
+        streaming=True,
+    ) -> LazySequenceCollection | LazyProteinCollection: ...
+
     def load_files(
         self,
         min_record_length: int = 0,
         streaming: bool = False,
-    ) -> SequenceCollection | ProteinCollection:
+    ) -> SequenceCollectionBase | ProteinCollectionBase:
 
         if min_record_length > 0:
             self.console.print(
@@ -460,42 +474,45 @@ class SequencePathCollection(Sequence[Path]):
             )
 
             if self.format == "faa":
-                return ProteinCollection(
-                    (
-                        Protein(
-                            id=s.name,  # ty:ignore[invalid-argument-type]
-                            seq=s,  # ty:ignore[invalid-argument-type]
-                            tt=None,
-                        )
-                        for s in seqs
-                    ),
-                    console=self.console,
+                prots = (
+                    Protein(
+                        id=s.name,  # ty:ignore[invalid-argument-type]
+                        seq=s,  # ty:ignore[invalid-argument-type]
+                        tt=None,
+                    )
+                    for s in seqs
                 )
+                if streaming:
+                    return LazyProteinCollection(
+                        proteins=prots,
+                        console=self.console,
+                    )
+                else:
+                    return ProteinCollection(
+                        proteins=tuple(prots),
+                        console=self.console,
+                    )
             if streaming:
-                return SequenceCollection(
+                return LazySequenceCollection(
                     sequences=seqs,
                     console=self.console,
                 )
             else:
                 return SequenceCollection(
-                    sequences=list(seqs),
+                    sequences=tuple(seqs),
                     console=self.console,
                 )
 
 
-class SequenceCollection(Iterable[gb_io.Record]):
-    """A collection sequence records in gb_io.Record format"""
+class SequenceCollectionBase(Iterable[gb_io.Record]):
+    """
+    Shared base class for collections of gb_io.Record.
 
-    def __init__(
-        self,
-        sequences: Iterable[gb_io.Record],
-        console: Console | None = None,
-    ):
-        self.sequences = sequences
-        self.console = console if console is not None else Console()
+    Child classes should implement iteration over self of gb_io.Record objects
+    """
 
-    def __iter__(self) -> Iterator[gb_io.Record]:
-        return iter(self.sequences)
+    def __init__(self, console: Console | None = None) -> None:
+        self.console: Console = console if console is not None else Console()
 
     def split_and_dump(
         self,
@@ -507,17 +524,17 @@ class SequenceCollection(Iterable[gb_io.Record]):
         if batch_size is None:
             if not compressed:
                 with open(output, "wb") as f:
-                    gb_io.dump(self.sequences, fh=f)
+                    gb_io.dump(self, fh=f)
             else:
                 with gzip.GzipFile(
                     filename=str(output),
                     mode="wb",
                     mtime=0,  # equivalent to gzip -n
                 ) as f:
-                    gb_io.dump(self.sequences, fh=f)  # ty:ignore[invalid-argument-type]
+                    gb_io.dump(self, fh=f)  # ty:ignore[invalid-argument-type]
         else:
             output.mkdir(exist_ok=True, parents=True)
-            for i, batch in enumerate(batched(self.sequences, batch_size)):
+            for i, batch in enumerate(batched(self, batch_size)):
                 batch_filename = output / f"batch{i}.gbf"
                 if compressed:
                     batch_filename = batch_filename.with_suffix(".gbf.gz")
@@ -574,9 +591,7 @@ class SequenceCollection(Iterable[gb_io.Record]):
 
             task = progress.add_task(
                 description="Finding ORFs",
-                total=(
-                    len(self.sequences) if isinstance(self.sequences, Sized) else None
-                ),
+                total=(len(self) if isinstance(self, Sized) else None),
                 unit="contig(s)",
                 precision="",
             )
@@ -602,7 +617,7 @@ class SequenceCollection(Iterable[gb_io.Record]):
             if not call_genes:
                 seq_dict = collections.defaultdict(list)
 
-                for seq in self.sequences:
+                for seq in self:
                     if seq.features is not None and seq.features:
                         seq_dict["annotated"].append(seq)
                     else:
@@ -638,7 +653,7 @@ class SequenceCollection(Iterable[gb_io.Record]):
                 )
 
                 genes = pyrodial_finder.find_genes(
-                    records=self.sequences,
+                    records=self,
                     min_gene_number=min_gene_number,
                     progress=callback_to_file if callback_file else callback,
                 )
@@ -651,27 +666,199 @@ class SequenceCollection(Iterable[gb_io.Record]):
             return GeneCollection(genes=genes, jobs=jobs, console=self.console)
 
 
-class ProteinCollection(Iterable[Protein]):
-    """A collection of Protein objects"""
+class LazySequenceCollection(SequenceCollectionBase):
+    """
+    Single-pass stream of sequence records in gb_io.Record format.
+
+    Iterating a second time raises an Error.
+    """
+
+    def __init__(
+        self,
+        sequences: Iterable[gb_io.Record],
+        console: Console | None = None,
+    ) -> None:
+        super().__init__(console)
+        self._source: Iterator[gb_io.Record] = iter(sequences)
+        self._consumed: bool = False
+
+    def __iter__(self) -> Iterator[gb_io.Record]:
+        if self._consumed:
+            raise RuntimeError(
+                "This collection is a single-pass stream and has already been "
+                "consumed. Call .collect() first if you need to iterate it "
+                "more than once."
+            )
+        self._consumed = True
+        return self._source
+
+    def collect(self) -> SequenceCollection:
+        """Consume the stream into memory. Uses up this collection."""
+        return SequenceCollection(self, console=self.console)
+
+
+class SequenceCollection(SequenceCollectionBase, Sequence[gb_io.Record]):
+    """
+    Immutable, in-memory collection of sequence records in gb_io.Record format.
+
+    This class is re-iterable and indexable.
+    """
+
+    def __init__(
+        self,
+        sequences: Iterable[gb_io.Record],
+        console: Console | None = None,
+    ) -> None:
+        super().__init__(console)
+        self._sequences: tuple[gb_io.Record, ...] = tuple(sequences)
+
+    def __len__(self) -> int:
+        return len(self._sequences)
+
+    def __iter__(self) -> Iterator[gb_io.Record]:
+        return iter(self._sequences)
+
+    @overload
+    def __getitem__(self, index: int) -> gb_io.Record: ...
+
+    @overload
+    def __getitem__(self, index: slice) -> SequenceCollection: ...
+
+    def __getitem__(
+        self,
+        index: int | slice,
+    ) -> gb_io.Record | SequenceCollection:
+        if isinstance(index, slice):
+            new = copy.copy(self)  # keeps the console
+            new._sequences = self._sequences[index]
+            return new
+        return self._sequences[index]
+
+    def materialize(self) -> SequenceCollection:
+        """Already in memory. Returns self"""
+        return self
+
+
+class ProteinCollectionBase(Iterable[Protein]):
+    """
+    Shared base for collections of Protein objects.
+
+    Child classes should implement iteration over self of Protein objects
+    """
+
+    def __init__(
+        self,
+        jobs: int = 0,
+        console: Console | None = None,
+    ) -> None:
+        self.console: Console = console if console is not None else Console()
+        self.jobs: int = jobs
+
+    def dump(self, output: Path):
+        # TODO compression
+        output = Path(output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        faa_path = output.with_suffix(".faa")
+
+        with open(faa_path, "w") as faa_f:
+            for protein in self:
+                faa_str = protein.to_faa()
+                faa_f.write(faa_str)
+                if not faa_str.endswith("\n"):
+                    faa_f.write("\n")
+
+
+class LazyProteinCollection(ProteinCollectionBase):
+    """
+    Single-pass stream of Protein objects.
+
+    Note:
+        Iterating a second time raises an Error
+    """
 
     def __init__(
         self,
         proteins: Iterable[Protein],
         jobs: int = 0,
         console: Console | None = None,
-    ):
-        self.proteins = proteins
-        self.console = console if console is not None else Console()
-        self.jobs = jobs
-
-    def __len__(self) -> int:
-        if isinstance(self.proteins, Sized):
-            return len(self.proteins)
-        else:
-            return 0
+    ) -> None:
+        super().__init__(jobs=jobs, console=console)
+        self._source: Iterator[Protein] = iter(proteins)
+        self._consumed: bool = False
 
     def __iter__(self) -> Iterator[Protein]:
-        return iter(self.proteins)
+        if self._consumed:
+            raise RuntimeError(
+                "This collection is a single-pass stream and has already been "
+                "consumed. Call .collect() first if you need to iterate it "
+                "more than once."
+            )
+        self._consumed = True
+        return self._source
+
+    def collect(self) -> ProteinCollection:
+        """Consume the stream into memory. Uses up this collection."""
+        return ProteinCollection(self, jobs=self.jobs, console=self.console)
+
+    def annotate_domains(
+        self,
+        hmms: list[HMMSet],
+        whitelist: Collection[str] | None = None,
+        bit_cutoffs: str | None = None,
+        pvalue_filter: float | None = None,
+        evalue_filter: float | None = None,
+    ) -> AnnotatedProteinCollection:
+        """
+        Run all HMMs over ORFs to annotate with protein domains
+
+        Note:
+            This first materializes to a ProteinCollection
+            and then calls that annotate_domains fn
+        """
+        return self.collect().annotate_domains(
+            hmms=hmms,
+            whitelist=whitelist,
+            bit_cutoffs=bit_cutoffs,
+            pvalue_filter=pvalue_filter,
+            evalue_filter=evalue_filter,
+        )
+
+
+class ProteinCollection(ProteinCollectionBase, Sequence[Protein]):
+    """
+    Immutable, in-memory collection of Protein objects. Re-iterable and indexable."""
+
+    def __init__(
+        self,
+        proteins: Iterable[Protein],
+        jobs: int = 0,
+        console: Console | None = None,
+    ) -> None:
+        super().__init__(jobs=jobs, console=console)
+        self._proteins: tuple[Protein, ...] = tuple(proteins)
+
+    def __len__(self) -> int:
+        return len(self._proteins)
+
+    def __iter__(self) -> Iterator[Protein]:
+        return iter(self._proteins)
+
+    @overload
+    def __getitem__(self, index: int) -> Protein: ...
+
+    @overload
+    def __getitem__(self, index: slice) -> ProteinCollection: ...
+
+    def __getitem__(self, index: int | slice) -> Protein | ProteinCollection:
+        if isinstance(index, slice):
+            new = copy.copy(self)  # keeps console and jobs
+            new._proteins = self._proteins[index]
+            return new
+        return self._proteins[index]
+
+    def materialize(self) -> ProteinCollection:
+        """Already in memory, so this returns itself."""
+        return self
 
     def annotate_domains(
         self,
@@ -684,7 +871,7 @@ class ProteinCollection(Iterable[Protein]):
         """Run all HMMs over ORFs to annotate with protein domains"""
         # I must materialize it here because i iterate over hmms
         # pyhmmer materializes anyway
-        proteins = list(self.proteins)
+        proteins = list(self)
         if not proteins:
             raise ValueError("Didnt get any proteins!")
 
@@ -743,19 +930,6 @@ class ProteinCollection(Iterable[Protein]):
         # or (preferred) on an AnnotatedGeneCollection object.
 
         return AnnotatedProteinCollection(proteins=proteins, console=self.console)
-
-    def dump(self, output: Path):
-        # TODO compression
-        output = Path(output)
-        output.parent.mkdir(parents=True, exist_ok=True)
-        faa_path = output.with_suffix(".faa")
-
-        with open(faa_path, "w") as faa_f:
-            for protein in self.proteins:
-                faa_str = protein.to_faa()
-                faa_f.write(faa_str)
-                if not faa_str.endswith("\n"):
-                    faa_f.write("\n")
 
 
 class AnnotatedProteinCollection(Sequence[Protein]):
