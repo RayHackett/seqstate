@@ -933,38 +933,45 @@ class ProteinCollection(ProteinCollectionBase, Sequence[Protein]):
 
 
 class AnnotatedProteinCollection(Sequence[Protein]):
-    """A collection of Protein objects annotated with domain information"""
+    """An immutable collection of Protein objects annotated with domain information"""
 
     def __init__(
         self,
-        proteins: list[Protein],
+        proteins: Iterable[Protein],
         console: Console | None = None,
     ):
-        self.proteins = list(proteins)
+        self._proteins = tuple(proteins)
         self.console = console if console is not None else Console()
 
     def __len__(self) -> int:
-        return len(self.proteins)
+        return len(self._proteins)
+
+    def __iter__(self) -> Iterator[Protein]:
+        return iter(self._proteins)
 
     @overload
-    def __getitem__(self, idx: int) -> Protein: ...
+    def __getitem__(self, index: int) -> Protein: ...
 
     @overload
-    def __getitem__(self, idx: slice) -> list[Protein]: ...
+    def __getitem__(self, index: slice) -> AnnotatedProteinCollection: ...
 
-    def __getitem__(self, idx: int | slice):  # ty:ignore[invalid-method-override]
-        return self.proteins[idx]
+    def __getitem__(self, index: int | slice) -> Protein | AnnotatedProteinCollection:
+        if isinstance(index, slice):
+            new = copy.copy(self)  # keeps the console
+            new._proteins = self._proteins[index]
+            return new
+        return self._proteins[index]
 
     def disentangle_domains(self) -> AnnotatedProteinCollection:
         self.console.print("Disentangling overlapping domains in each gene")
         return AnnotatedProteinCollection(
-            proteins=[protein.disentangle() for protein in self.proteins],
+            proteins=tuple(protein.disentangle() for protein in self._proteins),
             console=self.console,
         )
 
     def create_table(self) -> polars.DataFrame:
         tbl_data = collections.defaultdict(list)
-        for protein in self.proteins:
+        for protein in self._proteins:
             for domain in protein.domains:
                 tbl_data["protein_id"].append(protein.id)
                 tbl_data["domain"].append(domain.name)
