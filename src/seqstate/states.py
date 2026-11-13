@@ -4,13 +4,14 @@ import collections
 import contextlib
 import copy
 import gzip
+import os
 import warnings
 from collections.abc import Callable
 from functools import partial
 from itertools import chain, groupby
 from pathlib import Path
 from typing import (Collection, Iterable, Iterator, Literal, Sequence, Sized,
-                    TextIO, overload)
+                    TextIO, TypeAlias, overload)
 
 from pyhmmer.easel import AA
 
@@ -40,47 +41,65 @@ from seqstate.hmm_collection import HMMSet
 from seqstate.tables import FeatureTable, GeneTable
 from seqstate.utils import zopen
 
+StrPath: TypeAlias = str | os.PathLike[str]
+
 
 class SequencePathCollection(Sequence[Path]):
     """A collection of file paths to genomic sequence files"""
 
     FORMATS = Literal[
-        "genbank", "faa", "fna", "ncbi", "embl", "gff", "gff+faa", "fasta"
+        "genbank", "faa", "fna", "ncbi", "embl", "gff", "gff+faa", "fasta", "mix"
     ]
 
     def __init__(
         self,
-        paths: Iterable[Path],
+        paths: Iterable[StrPath],
         console: Console | None = None,
     ):
-
-        self.paths = list(paths)
+        # immutable tuple because of the accompanying format detection
+        # files themselves could still change but whatever
+        self._paths = tuple(self._coerce(p) for p in paths)
+        if not self._paths:
+            raise ValueError("Got an empty iterable of paths!")
         self.console = console if console is not None else Console()
-
-        for path in self.paths:
-            if not isinstance(path, Path):
-                try:
-                    path = Path(path)
-                except TypeError as e:
-                    raise TypeError(
-                        f"Expected a str or path-like object, got {type(path).__name__}"
-                    ) from e
-            if not path.is_file():
-                raise FileNotFoundError(f"Path {str(path.resolve())} is missing!")
-
-        self.format = self._check_format()
+        self._format = self._check_format()
 
     def __len__(self) -> int:
-        return len(self.paths)
+        return len(self._paths)
 
     @overload
-    def __getitem__(self, idx: int) -> Path: ...
+    def __getitem__(self, index: int) -> Path: ...
 
     @overload
-    def __getitem__(self, idx: slice) -> list[Path]: ...
+    def __getitem__(self, index: slice) -> SequencePathCollection: ...
 
-    def __getitem__(self, idx: slice | int):  # ty:ignore[invalid-method-override]
-        return self.paths[idx]
+    def __getitem__(self, index: int | slice) -> Path | SequencePathCollection:
+        if isinstance(index, slice):
+            # A subset of validated paths is valid
+            # skipping re-validation and the format check.
+            new = copy.copy(self)
+            new._paths = self._paths[index]
+            return new
+        return self._paths[index]
+
+    def __hash__(self) -> int:
+        return hash(self._paths)
+
+    @property
+    def format(self) -> FORMATS | None:
+        return self._format
+
+    @staticmethod
+    def _coerce(path: StrPath) -> Path:
+        try:
+            p = Path(path)
+        except TypeError as e:
+            raise TypeError(
+                f"Expected a str or path-like object, got {type(path).__name__}"
+            ) from e
+        if not p.is_file():
+            raise FileNotFoundError(f"Path {p.resolve()} is missing!")
+        return p
 
     @staticmethod
     def guess_sequences_format(path: Path) -> str:
@@ -105,20 +124,20 @@ class SequencePathCollection(Sequence[Path]):
                     return seqfile.format
 
     def _check_format(self) -> FORMATS | None:
-        formats = [self.guess_sequences_format(p) for p in self.paths]
+        formats = [self.guess_sequences_format(p) for p in self._paths]
         if formats[0] is not None and all(f == formats[0] for f in formats):
             return formats[0]  # ty:ignore[invalid-return-type]
 
-        elif len(self.paths) == 2 and {*formats[:2]} == {"gff", "faa"}:
+        elif len(self._paths) == 2 and {*formats[:2]} == {"gff", "faa"}:
             return "gff+faa"
 
         else:
             if "faa" in formats:
                 raise ValueError("Got mixed input genomic and faa sequence files!")
             for f in formats:
-                if f not in ["faa", "fna", "genbank", "embl", "ncbi"]:
+                if f not in ["fna", "genbank", "embl", "ncbi"]:
                     raise ValueError(f"Got odd format {f}")
-            return None
+            return None  # mixed formats which we will detect later
 
     @classmethod
     def _load_records(
@@ -217,7 +236,7 @@ class SequencePathCollection(Sequence[Path]):
     @overload
     def _iter_sequences(
         self,
-        paths: list[Path],
+        paths: tuple[Path, ...],
         streaming: bool,
         format: Literal["faa"],
         min_record_length: int = 0,
@@ -226,7 +245,7 @@ class SequencePathCollection(Sequence[Path]):
     @overload
     def _iter_sequences(
         self,
-        paths: list[Path],
+        paths: tuple[Path, ...],
         streaming: bool,
         format: FORMATS | None = None,
         min_record_length: int = 0,
@@ -234,7 +253,7 @@ class SequencePathCollection(Sequence[Path]):
 
     def _iter_sequences(
         self,
-        paths: list[Path],
+        paths: tuple[Path, ...],
         streaming: bool,
         format: str | None = None,
         min_record_length: int = 0,
@@ -350,13 +369,13 @@ class SequencePathCollection(Sequence[Path]):
 
         if self.format == "gff+faa":
 
-            guess1 = self.guess_sequences_format(self.paths[0])
-            guess2 = self.guess_sequences_format(self.paths[1])
+            guess1 = self.guess_sequences_format(self._paths[0])
+            guess2 = self.guess_sequences_format(self._paths[1])
 
             if guess1 == "faa":
-                faa_path, gff_path = self.paths[0], self.paths[1]
+                faa_path, gff_path = self._paths[0], self._paths[1]
             elif guess2 == "faa" and guess1 == "gff":
-                faa_path, gff_path = self.paths[1], self.paths[0]
+                faa_path, gff_path = self._paths[1], self._paths[0]
 
             if streaming:
                 raise ValueError("No streaming support with faa+gff format!")
@@ -367,7 +386,7 @@ class SequencePathCollection(Sequence[Path]):
                 )
 
             prot_records = self._iter_sequences(
-                paths=[faa_path],
+                paths=(faa_path,),
                 streaming=False,
                 format="faa",
             )
@@ -434,7 +453,7 @@ class SequencePathCollection(Sequence[Path]):
 
         else:
             seqs = self._iter_sequences(
-                paths=self.paths,
+                paths=self._paths,
                 streaming=streaming,
                 min_record_length=min_record_length,
                 format=self.format,
